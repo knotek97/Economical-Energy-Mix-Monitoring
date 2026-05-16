@@ -67,7 +67,7 @@ st.set_page_config(
     initial_sidebar_state="expanded",
 )
 
-# ── Custom CSS ────────────────────────────────────────────────────────────────
+# ── Custom CSS (light theme) ──────────────────────────────────────────────────
 st.markdown("""
 <style>
     @import url('https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=DM+Sans:wght@300;400;600;700&display=swap');
@@ -76,49 +76,51 @@ st.markdown("""
         font-family: 'DM Sans', sans-serif;
     }
 
-    /* Metric cards */
+    /* ── Metric cards ──────────────────────────────────────────────────────── */
     .metric-card {
-        background: linear-gradient(135deg, #0f1117 0%, #1a1d2e 100%);
-        border: 1px solid #2a2d3e;
+        background: #ffffff;
+        border: 1px solid #e5e7eb;
         border-radius: 10px;
         padding: 1.1rem 1.4rem;
         text-align: center;
+        box-shadow: 0 1px 3px rgba(0,0,0,0.06);
     }
     .metric-card-win {
-        background: linear-gradient(135deg, #0d3d1f 0%, #15532a 100%);
-        border: 2px solid #22c55e;
+        background: linear-gradient(135deg, #f0fdf4 0%, #dcfce7 100%);
+        border: 2px solid #16a34a;
         border-radius: 10px;
         padding: 1.1rem 1.4rem;
         text-align: center;
-        box-shadow: 0 0 16px rgba(34, 197, 94, 0.25), inset 0 0 24px rgba(34, 197, 94, 0.08);
+        box-shadow: 0 0 14px rgba(22,163,74,0.15);
     }
-    .metric-card-win .metric-label { color: #86efac; }
-    .metric-card-win .metric-value { color: #ffffff; }
-    .metric-card-win .metric-unit  { color: #bbf7d0; }
+    .metric-card-win .metric-label { color: #15803d; }
+    .metric-card-win .metric-value { color: #14532d; }
+    .metric-card-win .metric-unit  { color: #166534; }
 
     .metric-card-loss {
-        background: linear-gradient(135deg, #4c0f1a 0%, #611821 100%);
-        border: 2px solid #ef4444;
+        background: linear-gradient(135deg, #fff1f2 0%, #ffe4e6 100%);
+        border: 2px solid #dc2626;
         border-radius: 10px;
         padding: 1.1rem 1.4rem;
         text-align: center;
-        box-shadow: 0 0 16px rgba(239, 68, 68, 0.25), inset 0 0 24px rgba(239, 68, 68, 0.08);
+        box-shadow: 0 0 14px rgba(220,38,38,0.12);
     }
-    .metric-card-loss .metric-label { color: #fca5a5; }
-    .metric-card-loss .metric-value { color: #ffffff; }
-    .metric-card-loss .metric-unit  { color: #fecaca; }
+    .metric-card-loss .metric-label { color: #b91c1c; }
+    .metric-card-loss .metric-value { color: #7f1d1d; }
+    .metric-card-loss .metric-unit  { color: #991b1b; }
 
     .metric-card-overall {
-        background: linear-gradient(135deg, #422006 0%, #713f12 100%);
-        border: 2px solid #f59e0b;
+        background: linear-gradient(135deg, #fffbeb 0%, #fef3c7 100%);
+        border: 2px solid #d97706;
         border-radius: 10px;
         padding: 1.1rem 1.4rem;
         text-align: center;
-        box-shadow: 0 0 20px rgba(245, 158, 11, 0.3), inset 0 0 24px rgba(245, 158, 11, 0.1);
+        box-shadow: 0 0 16px rgba(217,119,6,0.18);
     }
-    .metric-card-overall .metric-label { color: #fcd34d; }
-    .metric-card-overall .metric-value { color: #ffffff; }
-    .metric-card-overall .metric-unit  { color: #fde68a; }
+    .metric-card-overall .metric-label { color: #92400e; }
+    .metric-card-overall .metric-value { color: #78350f; }
+    .metric-card-overall .metric-unit  { color: #b45309; }
+
     .metric-label {
         color: #6b7280;
         font-size: 0.72rem;
@@ -127,23 +129,23 @@ st.markdown("""
         font-family: 'DM Mono', monospace;
     }
     .metric-value {
-        color: #e8eaf6;
+        color: #111827;
         font-size: 1.75rem;
         font-weight: 700;
         line-height: 1.2;
         margin: 0.2rem 0;
     }
     .metric-unit {
-        color: #4b5563;
+        color: #9ca3af;
         font-size: 0.72rem;
         font-family: 'DM Mono', monospace;
     }
-    .metric-delta-pos { color: #34d399; font-size: 0.8rem; }
-    .metric-delta-neg { color: #f87171; font-size: 0.8rem; }
+    .metric-delta-pos { color: #16a34a; font-size: 0.8rem; }
+    .metric-delta-neg { color: #dc2626; font-size: 0.8rem; }
 
-    /* Section headers */
+    /* ── Section headers ───────────────────────────────────────────────────── */
     .section-title {
-        color: #a5b4fc;
+        color: #4338ca;
         font-size: 1rem;
         font-weight: 600;
         border-left: 3px solid #6366f1;
@@ -153,45 +155,47 @@ st.markdown("""
         letter-spacing: 0.02em;
     }
 
-    /* Thesis callout */
+    /* ── Thesis callout ────────────────────────────────────────────────────── */
     .thesis-box {
-        background: linear-gradient(135deg, #1e1b4b 0%, #1a1d2e 100%);
-        border: 1px solid #4338ca;
+        background: linear-gradient(135deg, #eef2ff 0%, #e0e7ff 100%);
+        border: 1px solid #a5b4fc;
+        border-left: 4px solid #6366f1;
         border-radius: 10px;
         padding: 1rem 1.4rem;
         margin-bottom: 1.2rem;
         font-size: 0.88rem;
-        color: #c7d2fe;
+        color: #312e81;
         line-height: 1.6;
     }
-    .thesis-box strong { color: #a5b4fc; }
+    .thesis-box strong { color: #4338ca; }
 
-    /* Placeholder / coming soon */
+    /* ── Placeholder ───────────────────────────────────────────────────────── */
     .placeholder-box {
-        background: #0f1117;
-        border: 1px dashed #374151;
+        background: #f9fafb;
+        border: 1px dashed #d1d5db;
         border-radius: 10px;
         padding: 1.5rem;
         text-align: center;
-        color: #4b5563;
+        color: #9ca3af;
         font-family: 'DM Mono', monospace;
         font-size: 0.8rem;
     }
     .placeholder-box span { color: #6366f1; font-weight: 600; }
 
-    /* Disclaimer */
+    /* ── Disclaimer ────────────────────────────────────────────────────────── */
     .disclaimer {
-        background: #1c1a12;
-        border: 1px solid #78350f;
+        background: #fffbeb;
+        border: 1px solid #fcd34d;
+        border-left: 4px solid #f59e0b;
         border-radius: 8px;
         padding: 0.7rem 1rem;
-        color: #fbbf24;
+        color: #92400e;
         font-size: 0.78rem;
         font-family: 'DM Mono', monospace;
         margin-bottom: 1rem;
     }
 
-    /* Causal chain */
+    /* ── Causal chain ──────────────────────────────────────────────────────── */
     .causal-chain {
         display: flex;
         align-items: center;
@@ -200,42 +204,41 @@ st.markdown("""
         margin: 0.8rem 0;
     }
     .causal-step {
-        background: #1e1b4b;
-        border: 1px solid #4338ca;
+        background: #eef2ff;
+        border: 1px solid #a5b4fc;
         border-radius: 6px;
         padding: 0.3rem 0.7rem;
         font-size: 0.78rem;
-        color: #c7d2fe;
+        color: #3730a3;
         font-family: 'DM Mono', monospace;
         white-space: nowrap;
     }
     .causal-arrow { color: #6366f1; font-size: 1rem; }
 
-    /* Stale data banner */
+    /* ── Stale data banner ─────────────────────────────────────────────────── */
     .stale-banner {
-        background: linear-gradient(135deg, #3d2000 0%, #4a2800 100%);
-        border: 1px solid #f59e0b;
+        background: #fffbeb;
+        border: 1px solid #fcd34d;
         border-left: 4px solid #f59e0b;
         border-radius: 8px;
         padding: 0.75rem 1.1rem;
         margin-bottom: 1rem;
-        color: #fcd34d;
+        color: #92400e;
         font-size: 0.82rem;
         font-family: 'DM Mono', monospace;
         line-height: 1.5;
     }
-    .stale-banner strong { color: #fbbf24; }
+    .stale-banner strong { color: #78350f; }
 
-    /* Pulsing fetch button — applied via JS injection when data is stale */
+    /* ── Pulsing fetch button ──────────────────────────────────────────────── */
     @keyframes pulse-border {
-        0%   { box-shadow: 0 0 0 0 rgba(245, 158, 11, 0.7); }
-        70%  { box-shadow: 0 0 0 8px rgba(245, 158, 11, 0); }
-        100% { box-shadow: 0 0 0 0 rgba(245, 158, 11, 0); }
+        0%   { box-shadow: 0 0 0 0 rgba(217, 119, 6, 0.6); }
+        70%  { box-shadow: 0 0 0 8px rgba(217, 119, 6, 0); }
+        100% { box-shadow: 0 0 0 0 rgba(217, 119, 6, 0); }
     }
     .stale-fetch-btn > div > button {
         animation: pulse-border 1.6s ease-in-out infinite !important;
         border-color: #f59e0b !important;
-        color: #fbbf24 !important;
     }
 </style>
 """, unsafe_allow_html=True)
@@ -813,14 +816,14 @@ if all(v is None for v in [prices, gen, inflation, capacity]):
         row, col = i // 2, i % 2
         with col_pairs[row][col]:
             st.markdown(f"""
-            <div style='background:linear-gradient(135deg,#0f1117 0%,#1a1d2e 100%);
-                        border:1px solid #2a2d3e; border-radius:10px;
-                        padding:1rem 1.2rem; height:100%;'>
-                <div style='font-size:1rem; font-weight:700; color:#e8eaf6;
+            <div style='background:#ffffff; border:1px solid #e5e7eb;
+                        border-radius:10px; padding:1rem 1.2rem; height:100%;
+                        box-shadow:0 1px 3px rgba(0,0,0,0.06);'>
+                <div style='font-size:1rem; font-weight:700; color:#111827;
                             margin-bottom:0.2rem;'>{sug["label"]}</div>
                 <div style='font-size:0.78rem; color:#6366f1; font-family:DM Mono,monospace;
                             margin-bottom:0.5rem;'>{sug["subtitle"]}</div>
-                <div style='font-size:0.8rem; color:#9ca3af; line-height:1.5;'>{sug["detail"]}</div>
+                <div style='font-size:0.8rem; color:#6b7280; line-height:1.5;'>{sug["detail"]}</div>
             </div>
             """, unsafe_allow_html=True)
             if st.button(f"Use this comparison", key=f"quick_{sug['country']}_{sug['compare']}"):
@@ -959,7 +962,7 @@ with tab1:
                 ))
             fig_share.update_layout(
                 title=f"Renewable & Nuclear Share of Installed Capacity — {country_label} (%)",
-                template="plotly_dark",
+                template="plotly_white",
                 margin=dict(l=0, r=0, t=40, b=0), height=CH_MD,
                 yaxis=dict(title="%", range=[0, 105]),
                 xaxis_title="Year",
@@ -978,7 +981,7 @@ with tab1:
                 color_discrete_map=color_map,
             )
             fig_cap.update_layout(
-                template="plotly_dark",
+                template="plotly_white",
                 margin=dict(l=0, r=0, t=40, b=0), height=CH_LG,
                 legend=dict(orientation="h", y=-0.25),
             )
@@ -1035,7 +1038,7 @@ with tab1:
         fig_inf.add_hline(y=0, line_dash="dash", line_color="#374151", line_width=1)
         fig_inf.update_layout(
             title=f"Inflation — {country_label} · {long_term_years}-year view (% YoY)",
-            template="plotly_dark",
+            template="plotly_white",
             margin=dict(l=0, r=0, t=40, b=0), height=CH_LG,
             yaxis_title="Annual rate of change (%)",
             legend=dict(orientation="h", y=-0.15),
@@ -1101,7 +1104,7 @@ with tab1:
         ))
         fig_hp.update_layout(
             title=f"Household Electricity Price — {country_label} (€/kWh, excl. taxes)",
-            template="plotly_dark", showlegend=False,
+            template="plotly_white", showlegend=False,
             margin=dict(l=0, r=0, t=40, b=0), height=CH_MD,
             yaxis_title="€/kWh",
             xaxis_title="Semester",
@@ -1183,7 +1186,7 @@ with tab1:
         )
         fig_id.update_layout(
             title=f"Energy Import Dependency — {country_label} (% of total energy)",
-            template="plotly_dark", showlegend=False,
+            template="plotly_white", showlegend=False,
             margin=dict(l=0, r=0, t=40, b=0), height=CH_MD,
             yaxis_title="%",
             xaxis_title="Year",
@@ -1321,7 +1324,7 @@ with tab2:
                 ))
                 fig_mp.update_layout(
                     title=f"Monthly Average Day-Ahead Price — {country_label} (€/MWh)",
-                    template="plotly_dark", showlegend=False,
+                    template="plotly_white", showlegend=False,
                     margin=dict(l=0, r=0, t=40, b=0), height=CH_MD,
                     yaxis_title="€/MWh",
                 )
@@ -1336,7 +1339,7 @@ with tab2:
                     color_discrete_sequence=["#6366f1"],
                 )
                 fig_daily.update_layout(
-                    template="plotly_dark", showlegend=False,
+                    template="plotly_white", showlegend=False,
                     margin=dict(l=0, r=0, t=40, b=0), height=CH_MD,
                 )
                 st.plotly_chart(fig_daily, width='stretch')
@@ -1358,7 +1361,7 @@ with tab2:
                 ))
                 fig_mre.update_layout(
                     title=f"Monthly Renewable Generation Share — {country_label} (%)",
-                    template="plotly_dark", showlegend=False,
+                    template="plotly_white", showlegend=False,
                     margin=dict(l=0, r=0, t=40, b=0), height=CH_SM,
                     yaxis=dict(title="%", range=[0, 105]),
                 )
@@ -1417,7 +1420,7 @@ with tab2:
                 fig_cpi.add_hline(y=0, line_dash="dash", line_color="#374151", line_width=1)
                 fig_cpi.update_layout(
                     title=f"Inflation — {country_label} (% YoY)",
-                    template="plotly_dark",
+                    template="plotly_white",
                     margin=dict(l=0, r=0, t=40, b=0), height=CH_MD,
                     yaxis_title="% YoY",
                     legend=dict(orientation="h", y=-0.18),
@@ -1550,7 +1553,7 @@ with tab3:
                 color_discrete_sequence=["#6366f1"],
             )
             fig_prices.update_layout(
-                template="plotly_dark", showlegend=False,
+                template="plotly_white", showlegend=False,
                 margin=dict(l=0, r=0, t=40, b=0), height=CH_MD,
             )
             _add_crisis_line(fig_prices, prices.index)
@@ -1616,7 +1619,7 @@ with tab3:
                     color_discrete_map=color_map,
                 )
                 fig_area.update_layout(
-                    template="plotly_dark",
+                    template="plotly_white",
                     margin=dict(l=0, r=0, t=40, b=0), height=CH_LG,
                     legend=dict(orientation="h", y=-0.25),
                 )
@@ -1632,7 +1635,7 @@ with tab3:
                 ))
                 fig_pie.update_layout(
                     title="Generation Mix (%)",
-                    template="plotly_dark",
+                    template="plotly_white",
                     margin=dict(l=0, r=0, t=40, b=0), height=CH_LG,
                     showlegend=False,
                 )
@@ -1648,7 +1651,7 @@ with tab3:
             ))
             fig_bar.update_layout(
                 title="Total Generation per Source (MWh)",
-                template="plotly_dark", showlegend=False,
+                template="plotly_white", showlegend=False,
                 margin=dict(l=0, r=0, t=40, b=0), height=CH_MD,
                 yaxis_title="MWh",
             )
@@ -2071,7 +2074,7 @@ with tab4:
             ))
             fig_pb.update_layout(
                 title="Average Day-Ahead Price (€/MWh)",
-                template="plotly_dark", showlegend=False,
+                template="plotly_white", showlegend=False,
                 margin=dict(l=0, r=0, t=40, b=0), height=CH_SM,
                 yaxis=dict(title="€/MWh"),
             )
@@ -2132,7 +2135,7 @@ with tab4:
                               annotation_text="ECB 2% target", annotation_position="bottom right")
             fig_cpi.update_layout(
                 title="General CPI Comparison (% YoY)",
-                template="plotly_dark",
+                template="plotly_white",
                 margin=dict(l=0, r=0, t=40, b=0), height=CH_MD,
                 yaxis_title="% YoY",
                 legend=dict(orientation="h", y=-0.18),
@@ -2154,7 +2157,7 @@ with tab4:
             fig_ecpi.add_hline(y=0, line_dash="dash", line_color="#374151", line_width=1)
             fig_ecpi.update_layout(
                 title="Energy & Housing CPI Comparison (% YoY)",
-                template="plotly_dark",
+                template="plotly_white",
                 margin=dict(l=0, r=0, t=40, b=0), height=CH_MD,
                 yaxis_title="% YoY",
                 legend=dict(orientation="h", y=-0.18),
@@ -2178,7 +2181,7 @@ with tab4:
                         textinfo="label+percent",
                     ))
                     fig.update_layout(
-                        title=label, template="plotly_dark",
+                        title=label, template="plotly_white",
                         margin=dict(l=0, r=0, t=40, b=0), height=CH_LG,
                         showlegend=False,
                     )
@@ -2251,7 +2254,7 @@ with tab4:
             )
             fig_id_cmp.update_layout(
                 title="Energy Import Dependency Comparison (% of total energy)",
-                template="plotly_dark",
+                template="plotly_white",
                 margin=dict(l=0, r=0, t=40, b=0), height=CH_MD,
                 yaxis_title="%",
                 xaxis_title="Year",
@@ -2325,7 +2328,7 @@ with tab4:
                 ))
             fig_hp_cmp.update_layout(
                 title="Household Electricity Price Comparison (€/kWh, excl. taxes)",
-                template="plotly_dark",
+                template="plotly_white",
                 margin=dict(l=0, r=0, t=40, b=0), height=CH_MD,
                 yaxis_title="€/kWh",
                 xaxis_title="Semester",
@@ -2648,10 +2651,10 @@ with tab6:
     cls_col1, cls_col2, cls_col3 = st.columns(3)
     with cls_col1:
         st.markdown(f"""
-        <div style='border-left:4px solid {TIER_COLORS["renewable"]}; padding:0.6rem 1rem; background:#0a1f12; border-radius:6px; height:100%;'>
+        <div style='border-left:4px solid {TIER_COLORS["renewable"]}; padding:0.6rem 1rem; background:#f0fdf4; border-radius:6px; height:100%;'>
             <strong style='color:{TIER_COLORS["renewable"]}'>🌱 Renewable</strong><br>
-            <span style='font-size:0.85rem; color:#bbf7d0;'>Solar · Wind · Hydro · Biomass · Geothermal · Marine · Waste</span><br><br>
-            <span style='font-size:0.8rem; color:#9ca3af;'>
+            <span style='font-size:0.85rem; color:#166534;'>Solar · Wind · Hydro · Biomass · Geothermal · Marine · Waste</span><br><br>
+            <span style='font-size:0.8rem; color:#4b5563;'>
             Domestic, zero fuel imports, no exposure to global fuel prices.
             <strong>Truly energy-independent.</strong>
             </span>
@@ -2659,10 +2662,10 @@ with tab6:
         """, unsafe_allow_html=True)
     with cls_col2:
         st.markdown(f"""
-        <div style='border-left:4px solid {TIER_COLORS["nuclear"]}; padding:0.6rem 1rem; background:#1e1b3d; border-radius:6px; height:100%;'>
+        <div style='border-left:4px solid {TIER_COLORS["nuclear"]}; padding:0.6rem 1rem; background:#faf5ff; border-radius:6px; height:100%;'>
             <strong style='color:{TIER_COLORS["nuclear"]}'>⚛️ Nuclear</strong><br>
-            <span style='font-size:0.85rem; color:#e9d5ff;'>Nuclear (uranium-fuelled fission)</span><br><br>
-            <span style='font-size:0.8rem; color:#9ca3af;'>
+            <span style='font-size:0.85rem; color:#6b21a8;'>Nuclear (uranium-fuelled fission)</span><br><br>
+            <span style='font-size:0.8rem; color:#4b5563;'>
             Low-carbon but NOT renewable. Uranium is imported (Kazakhstan, Niger, Canada, Australia).
             Fuel cost is only ~5% of price, so price exposure is low —
             but <strong>still import-dependent</strong>.
@@ -2671,10 +2674,10 @@ with tab6:
         """, unsafe_allow_html=True)
     with cls_col3:
         st.markdown(f"""
-        <div style='border-left:4px solid {TIER_COLORS["fossil"]}; padding:0.6rem 1rem; background:#2d0a14; border-radius:6px; height:100%;'>
+        <div style='border-left:4px solid {TIER_COLORS["fossil"]}; padding:0.6rem 1rem; background:#fff1f2; border-radius:6px; height:100%;'>
             <strong style='color:{TIER_COLORS["fossil"]}'>🛢️ Fossil</strong><br>
-            <span style='font-size:0.85rem; color:#fecaca;'>Gas · Hard coal · Lignite · Oil · Peat</span><br><br>
-            <span style='font-size:0.8rem; color:#9ca3af;'>
+            <span style='font-size:0.85rem; color:#9f1239;'>Gas · Hard coal · Lignite · Oil · Peat</span><br><br>
+            <span style='font-size:0.8rem; color:#4b5563;'>
             High-carbon, fully import-dependent for most European countries.
             Fuel cost is ~60–80% of electricity price — <strong>direct exposure to global fuel price shocks</strong>.
             </span>

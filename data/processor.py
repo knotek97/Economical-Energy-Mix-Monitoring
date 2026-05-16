@@ -112,10 +112,10 @@ def classify_source(source_name: str) -> str:
 
 # Colours used consistently across the dashboard for each tier
 TIER_COLORS = {
-    "renewable": "#22c55e",   # green
-    "nuclear":   "#a855f7",   # purple
-    "fossil":    "#ef4444",   # red
-    "other":     "#6b7280",   # gray
+    "renewable": "#16a34a",   # green-600 — clear, accessible on white
+    "nuclear":   "#7c3aed",   # violet-600 — distinct from green, readable
+    "fossil":    "#dc2626",   # red-600 — clear warning colour
+    "other":     "#6b7280",   # gray-500
 }
 
 
