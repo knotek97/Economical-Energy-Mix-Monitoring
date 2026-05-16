@@ -261,13 +261,44 @@ def _add_crisis_line(fig, x_values) -> None:
     """
     Add a vertical reference line at 2022-02-24 (Russia/Ukraine war start)
     if that date falls within the chart's x-axis range.
-    This is the single most important event in European energy markets in
-    the last decade — marking it helps users interpret every price/CPI chart.
-    Modifies the figure in-place.
+
+    Handles all index types used in this app:
+      - DatetimeIndex     (prices, generation, monthly aggregates)
+      - PeriodIndex       (CPI series before .to_timestamp())
+      - Integer years     (installed capacity, import dependency)
+      - Semester strings  (household prices: "2020-S1")
+    For integer and semester indexes the annotation is skipped — a specific
+    date doesn't map cleanly onto annual or bi-annual data.
     """
     try:
-        dates = pd.to_datetime(list(x_values))
         crisis = pd.Timestamp(_CRISIS_DATE)
+
+        # Already a DatetimeIndex — fastest path, no parsing needed
+        if isinstance(x_values, pd.DatetimeIndex):
+            if x_values.min() <= crisis <= x_values.max():
+                fig.add_vline(
+                    x=_CRISIS_DATE,
+                    line_dash="dot",
+                    line_color="rgba(239,68,68,0.5)",
+                    line_width=1.5,
+                    annotation_text=_CRISIS_LABEL,
+                    annotation_position="top left",
+                    annotation_font=dict(color="#fca5a5", size=10),
+                )
+            return
+
+        # Integer index (years) or string semester labels — skip, not meaningful
+        vals = list(x_values)
+        if not vals:
+            return
+        if isinstance(vals[0], (int, str)) and (
+            isinstance(vals[0], int) or
+            (isinstance(vals[0], str) and "-S" in vals[0])
+        ):
+            return
+
+        # Anything else: try to parse with format='mixed' (no warning)
+        dates = pd.to_datetime(vals, format="mixed", dayfirst=False)
         if dates.min() <= crisis <= dates.max():
             fig.add_vline(
                 x=_CRISIS_DATE,
