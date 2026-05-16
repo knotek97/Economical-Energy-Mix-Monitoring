@@ -1,0 +1,15 @@
+# Energy & Economics Dashboard — Python dependencies
+# Pinned to known-working versions for stable Streamlit Cloud deployment.
+# Update versions deliberately, not automatically.
+
+# ── Core framework ────────────────────────────────────────────────────────────
+streamlit==1.57.0
+
+# ── Data & API ────────────────────────────────────────────────────────────────
+entsoe-py>=0.6.9          # ENTSO-E API wrapper — patch versions are safe
+pandas>=2.2.0,<3.0.0      # Data processing
+requests>=2.31.0           # Eurostat REST calls
+python-dotenv>=1.0.0       # .env file support (local dev)
+
+# ── Visualisation ─────────────────────────────────────────────────────────────
+plotly>=5.20.0             # Interactive charts

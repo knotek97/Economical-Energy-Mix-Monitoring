@@ -1,0 +1,23 @@
+[theme]
+base            = "dark"
+primaryColor    = "#6366f1"
+backgroundColor = "#0f1117"
+secondaryBackgroundColor = "#1a1d2e"
+textColor       = "#e8eaf6"
+font            = "sans serif"
+
+[server]
+headless        = true        # Required for Streamlit Cloud
+enableCORS      = false
+enableXsrfProtection = true
+maxUploadSize   = 10          # MB
+
+[browser]
+gatherUsageStats = false      # Opt out of Streamlit telemetry
+
+[runner]
+fastReruns      = true        # Faster re-runs on widget interaction
+
+[client]
+showErrorDetails = false      # Don't expose tracebacks to public users
+toolbarMode     = "minimal"   # Cleaner UI — hides the Streamlit menu bar clutter
