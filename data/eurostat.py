@@ -20,7 +20,7 @@ Datasets:
 
 import requests
 import pandas as pd
-from data.cache_db import db_cached, TTL_INFLATION, TTL_HOUSEHOLD, TTL_IMPORT_DEP
+from .cache_db import db_cached, TTL_INFLATION, TTL_HOUSEHOLD, TTL_IMPORT_DEP
 
 EUROSTAT_BASE = "https://ec.europa.eu/eurostat/api/dissemination/statistics/1.0/data"
 

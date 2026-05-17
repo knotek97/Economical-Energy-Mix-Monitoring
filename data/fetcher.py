@@ -18,7 +18,7 @@ from entsoe.exceptions import NoMatchingDataError
 from requests.exceptions import HTTPError
 from dotenv import load_dotenv
 
-from data.cache_db import db_cached, TTL_PRICES, TTL_GENERATION, TTL_CAPACITY
+from .cache_db import db_cached, TTL_PRICES, TTL_GENERATION, TTL_CAPACITY
 
 load_dotenv()
 logger = logging.getLogger(__name__)
