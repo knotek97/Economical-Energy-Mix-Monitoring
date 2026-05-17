@@ -328,6 +328,136 @@ def fetch_household_electricity_price(
 # ══════════════════════════════════════════════════════════════════════════════
 # 3. Energy Import Dependency  (nrg_ind_id)
 # ══════════════════════════════════════════════════════════════════════════════
+@db_cached(ttl=TTL_HOUSEHOLD)
+def fetch_household_price_breakdown(
+    entsoe_code: str,
+    n_years: int = 10,
+) -> dict:
+    """
+    Fetch household electricity prices with a two-component breakdown:
+
+      excl_taxes  (X_TAX): Energy commodity + Network fees bundled together.
+                           This is the 'structural' cost — what it costs to
+                           produce and deliver the electricity, before any
+                           government charges.
+
+      incl_taxes  (I_TAX): Full consumer price including taxes, levies, and
+                           renewable surcharges (e.g. Germany's EEG-Umlage).
+
+      tax_burden         : Derived as incl_taxes − excl_taxes.
+                           Represents the total government and levy burden.
+
+    Important limitation:
+      Network fees cannot be further disaggregated from the energy commodity
+      cost via the Eurostat nrg_pc_204 API. Both are bundled in X_TAX.
+      To see network fee trends, compare X_TAX over time — rising X_TAX
+      alongside falling fossil prices (e.g. Germany 2012–2018) indicates
+      rising network costs from grid infrastructure investment.
+
+    Returns
+    -------
+    dict with keys:
+        'excl_taxes'  : pd.Series  — energy + network (€/kWh)
+        'incl_taxes'  : pd.Series  — full price (€/kWh)
+        'tax_burden'  : pd.Series  — taxes + levies (€/kWh, derived)
+        'latest_excl' : float
+        'latest_incl' : float
+        'latest_tax'  : float
+    """
+    eurostat_code = entsoe_to_eurostat(entsoe_code)
+    if not eurostat_code:
+        raise ValueError(f"No Eurostat mapping for ENTSO-E code: {entsoe_code}")
+
+    last_n = n_years * 2   # bi-annual data
+
+    def _fetch_component(tax_code: str) -> pd.Series:
+        BAND_PRIORITY = [
+            "KWH2500-4999", "KWH1000-2499", "KWH_LT1000",
+            "KWH5000-14999", "TOT_KWH",
+        ]
+        for band in BAND_PRIORITY:
+            url = (
+                f"{EUROSTAT_BASE}/nrg_pc_204"
+                f"?format=JSON&lang=EN"
+                f"&unit=KWH"
+                f"&currency=EUR"
+                f"&tax={tax_code}"
+                f"&nrg_cons={band}"
+                f"&geo={eurostat_code}"
+                f"&lastTimePeriod={last_n}"
+            )
+            try:
+                resp = requests.get(url, timeout=15)
+                resp.raise_for_status()
+                data = resp.json()
+
+                dims   = data["id"]
+                sizes  = data["size"]
+                values = data["value"]
+
+                nrg_labels  = list(data["dimension"]["nrg_cons"]["category"]["label"].keys())
+                time_labels = list(data["dimension"]["time"]["category"]["label"].values())
+
+                nrg_idx  = dims.index("nrg_cons")
+                time_idx = dims.index("time")
+
+                strides = [1] * len(dims)
+                for i in range(len(dims) - 2, -1, -1):
+                    strides[i] = strides[i + 1] * sizes[i + 1]
+
+                band_data = {}
+                for b_pos, band_code in enumerate(nrg_labels):
+                    band_data[band_code] = {}
+                    for t_pos, tlabel in enumerate(time_labels):
+                        flat = b_pos * strides[nrg_idx] + t_pos * strides[time_idx]
+                        val  = values.get(str(flat))
+                        if val is not None:
+                            band_data[band_code][tlabel] = val
+
+                for preferred in BAND_PRIORITY:
+                    if band_data.get(preferred):
+                        raw = band_data[preferred]
+                        # Sort chronologically
+                        sort_items = []
+                        for k, v in raw.items():
+                            if "S" in k:
+                                try:
+                                    y, s = k.split("S", 1)
+                                    sort_items.append((int(y), int(s), f"{y}-S{s}", v))
+                                except ValueError:
+                                    sort_items.append((9999, 9999, k, v))
+                            else:
+                                sort_items.append((9999, 9999, k, v))
+                        sort_items.sort(key=lambda x: (x[0], x[1]))
+                        return pd.Series(
+                            {label: val for _, _, label, val in sort_items},
+                            dtype=float,
+                        )
+            except Exception:
+                continue
+        raise ValueError(
+            f"No household price data ({tax_code}) for {eurostat_code} in any band."
+        )
+
+    excl = _fetch_component("X_TAX")
+    incl = _fetch_component("I_TAX")
+
+    # Align both series to common index
+    common = excl.index.intersection(incl.index)
+    excl   = excl.reindex(common)
+    incl   = incl.reindex(common)
+    tax    = (incl - excl).round(4)
+
+    return {
+        "excl_taxes":  excl.round(4),
+        "incl_taxes":  incl.round(4),
+        "tax_burden":  tax,
+        "latest_excl": round(float(excl.iloc[-1]), 4) if len(excl) > 0 else None,
+        "latest_incl": round(float(incl.iloc[-1]), 4) if len(incl) > 0 else None,
+        "latest_tax":  round(float(tax.iloc[-1]),  4) if len(tax)  > 0 else None,
+    }
+
+
 @db_cached(ttl=TTL_IMPORT_DEP)
 def fetch_energy_import_dependency(
     entsoe_code: str,

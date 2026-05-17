@@ -53,12 +53,13 @@ _start_lock = threading.Lock()
 def _fetch_eurostat_for(country_code: str, n_years: int = 5) -> None:
     """Pre-fetch all three Eurostat datasets for a country. Errors are logged, not raised."""
     # Import here to avoid circular imports at module load time
-    from data.eurostat import fetch_inflation, fetch_household_electricity_price, fetch_energy_import_dependency
+    from data.eurostat import fetch_inflation, fetch_household_electricity_price, fetch_household_price_breakdown, fetch_energy_import_dependency
 
     for fn, label in [
-        (lambda: fetch_inflation(country_code, n_years=n_years),               "inflation"),
-        (lambda: fetch_household_electricity_price(country_code, n_years=n_years), "household prices"),
-        (lambda: fetch_energy_import_dependency(country_code, n_years=n_years),    "import dependency"),
+        (lambda: fetch_inflation(country_code, n_years=n_years),                    "inflation"),
+        (lambda: fetch_household_electricity_price(country_code, n_years=n_years),  "household prices"),
+        (lambda: fetch_household_price_breakdown(country_code, n_years=n_years),    "price breakdown"),
+        (lambda: fetch_energy_import_dependency(country_code, n_years=n_years),     "import dependency"),
     ]:
         try:
             fn()

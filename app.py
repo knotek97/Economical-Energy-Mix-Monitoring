@@ -28,6 +28,7 @@ from data.fetcher import (
 from data.eurostat import (
     fetch_inflation,
     fetch_household_electricity_price,
+    fetch_household_price_breakdown,
     fetch_energy_import_dependency,
     entsoe_to_eurostat,
 )
@@ -601,9 +602,9 @@ with st.sidebar:
 # ── Session state ─────────────────────────────────────────────────────────────
 _keys = [
     "prices", "gen", "inflation", "capacity",
-    "household_price", "import_dep",
+    "household_price", "import_dep", "household_breakdown",
     "cmp_prices", "cmp_gen", "cmp_inflation", "cmp_capacity",
-    "cmp_household_price", "cmp_import_dep",
+    "cmp_household_price", "cmp_import_dep", "cmp_household_breakdown",
     "last_country", "last_cmp_country", "last_n_years",
     "fetch_attempted",
     "fetched_country", "fetched_cmp_country",
@@ -691,6 +692,15 @@ if fetch_btn:
                 st.warning(f"Energy import dependency unavailable: {e}")
                 st.session_state.import_dep = None
 
+        with st.spinner("Fetching Eurostat household price breakdown…"):
+            try:
+                st.session_state.household_breakdown = fetch_household_price_breakdown(
+                    country_code, n_years=long_term_years
+                )
+            except Exception as e:
+                st.warning(f"Household price breakdown unavailable: {e}")
+                st.session_state.household_breakdown = None
+
     # --- Compare country ---
     if compare_enabled and compare_code:
         with st.spinner(f"Fetching ENTSO-E data for {compare_label}…"):
@@ -746,28 +756,39 @@ if fetch_btn:
                 except Exception as e:
                     st.warning(f"Import dependency unavailable for {compare_label}: {e}")
                     st.session_state.cmp_import_dep = None
+
+                try:
+                    st.session_state.cmp_household_breakdown = fetch_household_price_breakdown(
+                        compare_code, n_years=long_term_years
+                    )
+                except Exception as e:
+                    st.warning(f"Household price breakdown unavailable for {compare_label}: {e}")
+                    st.session_state.cmp_household_breakdown = None
     else:
-        st.session_state.cmp_prices        = None
-        st.session_state.cmp_gen           = None
-        st.session_state.cmp_inflation     = None
-        st.session_state.cmp_capacity      = None
-        st.session_state.cmp_household_price = None
-        st.session_state.cmp_import_dep    = None
-        st.session_state.last_cmp_country  = None
+        st.session_state.cmp_prices             = None
+        st.session_state.cmp_gen                = None
+        st.session_state.cmp_inflation          = None
+        st.session_state.cmp_capacity           = None
+        st.session_state.cmp_household_price    = None
+        st.session_state.cmp_import_dep         = None
+        st.session_state.cmp_household_breakdown = None
+        st.session_state.last_cmp_country       = None
 
 # ── Unpack session state ───────────────────────────────────────────────────────
 prices              = st.session_state.prices
 gen                 = st.session_state.gen
-inflation           = st.session_state.inflation
-capacity            = st.session_state.capacity
-household_price     = st.session_state.household_price
-import_dep          = st.session_state.import_dep
-cmp_prices          = st.session_state.cmp_prices
-cmp_gen             = st.session_state.cmp_gen
-cmp_inflation       = st.session_state.cmp_inflation
-cmp_capacity        = st.session_state.cmp_capacity
-cmp_household_price = st.session_state.cmp_household_price
-cmp_import_dep      = st.session_state.cmp_import_dep
+inflation                = st.session_state.inflation
+capacity                 = st.session_state.capacity
+household_price          = st.session_state.household_price
+import_dep               = st.session_state.import_dep
+household_breakdown      = st.session_state.household_breakdown
+cmp_prices               = st.session_state.cmp_prices
+cmp_gen                  = st.session_state.cmp_gen
+cmp_inflation            = st.session_state.cmp_inflation
+cmp_capacity             = st.session_state.cmp_capacity
+cmp_household_price      = st.session_state.cmp_household_price
+cmp_import_dep           = st.session_state.cmp_import_dep
+cmp_household_breakdown  = st.session_state.cmp_household_breakdown
 
 # ── Empty state ───────────────────────────────────────────────────────────────
 fetch_attempted = st.session_state.fetch_attempted
@@ -894,7 +915,12 @@ with tab1:
     <div class="thesis-box">
     <strong>What this tab shows:</strong> Has this country actually committed to renewables?
     Installed capacity and long-term CPI trends reveal structural investment — not just what
-    the weather happened to produce last week.
+    the weather happened to produce last week.<br><br>
+    ⚠️ <strong>Important context on household prices:</strong> The total electricity price
+    households pay includes the energy commodity, network fees (grid infrastructure),
+    and taxes/levies. Countries mid-transition (like Germany) may show
+    <em>rising</em> network fees from grid investment even as fuel costs fall —
+    this is a short-term cost of long-term renewable infrastructure.
     </div>
     """, unsafe_allow_html=True)
 
@@ -1166,6 +1192,103 @@ with tab1:
     else:
         st.info("Household electricity price data unavailable for this country. "
                 "Not all countries report to Eurostat nrg_pc_204 (notably Switzerland, Norway, and some non-EU states).")
+
+    # ── Household price breakdown ──────────────────────────────────────────────
+    st.markdown('<div class="section-title">💡 Household Price Breakdown</div>', unsafe_allow_html=True)
+    st.markdown("""
+    <div class="thesis-box">
+    <strong>What this shows:</strong> The full household electricity price split into two components.
+    <strong>Energy + Network</strong> (excl. taxes) reflects what it costs to produce and deliver
+    electricity — this is where network infrastructure investment appears.
+    <strong>Taxes & Levies</strong> is the government-imposed portion (VAT, renewable surcharges, levies).<br><br>
+    ⚠️ <strong>Network fees cannot be further separated from the energy commodity cost</strong> via
+    the Eurostat API — both are bundled in the "excl. taxes" figure. A rising excl-taxes price
+    alongside falling fossil fuel prices (as in Germany 2012–2018) is a strong signal of rising
+    network infrastructure costs from grid investment.
+    </div>
+    """, unsafe_allow_html=True)
+
+    if household_breakdown is not None:
+        excl = household_breakdown["excl_taxes"]
+        incl = household_breakdown["incl_taxes"]
+        tax  = household_breakdown["tax_burden"]
+
+        hb1, hb2, hb3 = st.columns(3)
+        hb1.markdown(f"""
+        <div class="metric-card">
+            <div class="metric-label">Energy + Network (excl. taxes)</div>
+            <div class="metric-value">{household_breakdown['latest_excl']:.4f}</div>
+            <div class="metric-unit">€/kWh · {excl.index[-1] if len(excl) > 0 else '—'}</div>
+        </div>""", unsafe_allow_html=True)
+        hb2.markdown(f"""
+        <div class="metric-card">
+            <div class="metric-label">Total Price (incl. taxes)</div>
+            <div class="metric-value">{household_breakdown['latest_incl']:.4f}</div>
+            <div class="metric-unit">€/kWh · {incl.index[-1] if len(incl) > 0 else '—'}</div>
+        </div>""", unsafe_allow_html=True)
+        if household_breakdown["latest_tax"] is not None:
+            tax_pct = round(
+                household_breakdown["latest_tax"] /
+                household_breakdown["latest_incl"] * 100, 1
+            ) if household_breakdown["latest_incl"] else 0
+            hb3.markdown(f"""
+            <div class="metric-card">
+                <div class="metric-label">Tax & Levy Burden</div>
+                <div class="metric-value">{household_breakdown['latest_tax']:.4f}</div>
+                <div class="metric-unit">€/kWh · {tax_pct}% of total price</div>
+            </div>""", unsafe_allow_html=True)
+
+        st.markdown("")
+
+        # Stacked area: excl_taxes at bottom, tax_burden on top
+        fig_bd = go.Figure()
+        fig_bd.add_trace(go.Scatter(
+            x=excl.index, y=excl.values,
+            name="Energy + Network (excl. taxes)",
+            fill="tozeroy",
+            fillcolor="rgba(99,102,241,0.15)",
+            line=dict(color="#6366f1", width=2),
+            mode="lines",
+            hovertemplate="%{x}<br>%{y:.4f} €/kWh<extra>Energy + Network</extra>",
+        ))
+        fig_bd.add_trace(go.Scatter(
+            x=incl.index, y=incl.values,
+            name="Total price (incl. taxes)",
+            fill="tonexty",
+            fillcolor="rgba(245,158,11,0.12)",
+            line=dict(color="#f59e0b", width=2),
+            mode="lines",
+            hovertemplate="%{x}<br>%{y:.4f} €/kWh<extra>Total (incl. taxes)</extra>",
+        ))
+        fig_bd.update_layout(
+            title=f"Household Electricity Price Breakdown — {country_label} (€/kWh)",
+            template="plotly_white",
+            margin=dict(l=0, r=0, t=40, b=0), height=CH_MD,
+            yaxis_title="€/kWh",
+            xaxis_title="Semester",
+            legend=dict(orientation="h", y=-0.18),
+        )
+        _add_crisis_line(fig_bd, excl.index)
+        st.plotly_chart(fig_bd, width='stretch')
+
+        st.caption(
+            "🟦 Blue area = Energy commodity + Network fees (excl. all taxes) · "
+            "🟧 Amber area = Taxes, levies & surcharges · "
+            "The gap between the lines is the total tax/levy burden. "
+            "Network fees are embedded in the blue area and cannot be separately shown via this API."
+        )
+
+        # Germany-specific note
+        if "DE" in (entsoe_to_eurostat(country_code) or ""):
+            st.info(
+                "🇩🇪 **Germany note:** Germany's 'Energy + Network' price rose significantly "
+                "between 2012–2018 despite falling fossil fuel costs. This reflects the "
+                "*Netzentgelt* (grid tariff) increase driven by the Energiewende grid expansion "
+                "— a short-term cost of long-term renewable infrastructure investment. "
+                "Since 2022, network costs have partially stabilised as grid capacity catches up."
+            )
+    else:
+        st.info("Household price breakdown unavailable for this country.")
 
     # ── Energy import dependency ───────────────────────────────────────────────
     st.markdown('<div class="section-title">🛢️ Energy Import Dependency</div>', unsafe_allow_html=True)
@@ -2384,6 +2507,87 @@ with tab4:
         else:
             st.info("Household electricity price data unavailable for one or both countries.")
 
+        # ── Price breakdown comparison ─────────────────────────────────────────
+        st.markdown('<div class="section-title">💡 Price Breakdown: Energy+Network vs Taxes</div>', unsafe_allow_html=True)
+        st.caption(
+            "Comparing the structure of household electricity prices. "
+            "A country with a high 'Energy + Network' share relative to taxes may be "
+            "investing heavily in grid infrastructure. Network fees are embedded in the "
+            "excl-taxes price and cannot be separately isolated via the Eurostat API."
+        )
+
+        has_bd_a = household_breakdown     is not None
+        has_bd_b = cmp_household_breakdown is not None
+
+        if has_bd_a or has_bd_b:
+            bd1, bd2 = st.columns(2)
+
+            def _render_breakdown_chart(container, bd, label):
+                with container:
+                    if bd is None:
+                        st.info(f"No breakdown data for {label}.")
+                        return
+                    excl = bd["excl_taxes"]
+                    incl = bd["incl_taxes"]
+                    fig  = go.Figure()
+                    fig.add_trace(go.Scatter(
+                        x=excl.index, y=excl.values,
+                        name="Energy + Network",
+                        fill="tozeroy",
+                        fillcolor="rgba(99,102,241,0.15)",
+                        line=dict(color="#6366f1", width=2),
+                        mode="lines",
+                    ))
+                    fig.add_trace(go.Scatter(
+                        x=incl.index, y=incl.values,
+                        name="Total (incl. taxes)",
+                        fill="tonexty",
+                        fillcolor="rgba(245,158,11,0.12)",
+                        line=dict(color="#f59e0b", width=2),
+                        mode="lines",
+                    ))
+                    _add_crisis_line(fig, excl.index)
+                    fig.update_layout(
+                        title=label,
+                        template="plotly_white",
+                        margin=dict(l=0, r=0, t=40, b=0), height=CH_MD,
+                        yaxis_title="€/kWh",
+                        legend=dict(orientation="h", y=-0.18),
+                    )
+                    st.plotly_chart(fig, width='stretch')
+                    if bd["latest_excl"] and bd["latest_incl"]:
+                        tax_pct = round(bd["latest_tax"] / bd["latest_incl"] * 100, 1)
+                        st.caption(
+                            f"Latest: Energy+Network {bd['latest_excl']:.4f} €/kWh · "
+                            f"Total {bd['latest_incl']:.4f} €/kWh · "
+                            f"Tax burden {tax_pct}% of total"
+                        )
+
+            _render_breakdown_chart(bd1, household_breakdown,     country_label)
+            _render_breakdown_chart(bd2, cmp_household_breakdown, compare_label)
+
+            # Metric comparison: whose tax burden is higher?
+            if has_bd_a and has_bd_b and household_breakdown["latest_tax"] and cmp_household_breakdown["latest_tax"]:
+                tax_a = household_breakdown["latest_tax"]
+                tax_b = cmp_household_breakdown["latest_tax"]
+                pct_a = round(tax_a / household_breakdown["latest_incl"] * 100, 1)
+                pct_b = round(tax_b / cmp_household_breakdown["latest_incl"] * 100, 1)
+                bm1, bm2 = st.columns(2)
+                bm1.markdown(cmp_card(
+                    f"{country_label} — Tax burden",
+                    f"{pct_a}%",
+                    f"of total price · {tax_a:.4f} €/kWh",
+                    "win" if pct_a < pct_b else "loss",
+                ), unsafe_allow_html=True)
+                bm2.markdown(cmp_card(
+                    f"{compare_label} — Tax burden",
+                    f"{pct_b}%",
+                    f"of total price · {tax_b:.4f} €/kWh",
+                    "win" if pct_b < pct_a else "loss",
+                ), unsafe_allow_html=True)
+        else:
+            st.info("Price breakdown unavailable for one or both countries.")
+
         # ── CSV Downloads ──────────────────────────────────────────────────────
         st.divider()
         st.markdown('<div class="section-title">⬇️ Download Comparison Data</div>', unsafe_allow_html=True)
@@ -2685,6 +2889,57 @@ with tab6:
         st.markdown("---")
         st.markdown("**ECB 2% target line**")
         st.markdown("The European Central Bank targets 2% annual inflation as its price stability goal. The dashed line on CPI charts marks this threshold.")
+        st.markdown("---")
+        st.markdown("**Network fees (grid tariffs)**")
+        st.markdown(
+            "The cost of using the electricity grid — transmission lines, transformers, smart grid infrastructure. "
+            "Network fees are regulated by national energy regulators, not set by the market. "
+            "In the Eurostat data, they are bundled together with the energy commodity in the "
+            "'excluding taxes' price — they cannot be separately isolated via the API. "
+            "A rising 'excl. taxes' price alongside falling fossil fuel prices (as in Germany 2012–2018) "
+            "is a strong indicator of rising network costs from grid investment for renewables. "
+            "This is a short-term cost that ultimately enables long-term price stability."
+        )
+
+    st.divider()
+
+    # ── Network fees and the Germany case ─────────────────────────────────────
+    st.markdown('<div class="section-title">🔌 Network Fees — The Hidden Cost of Transition</div>', unsafe_allow_html=True)
+    st.markdown("""
+    When comparing household electricity prices across countries, a common misconception
+    is that higher renewable share should always mean lower prices. **Network fees explain
+    why this is often not the case in the short term.**
+    """)
+
+    col_nf1, col_nf2 = st.columns(2)
+    with col_nf1:
+        st.markdown("**What drives network fees up:**")
+        st.markdown(
+            "- Building new transmission lines to connect offshore wind farms\n"
+            "- Upgrading grid infrastructure for bidirectional power flows (solar)\n"
+            "- Adding cross-border interconnectors for better European market integration\n"
+            "- Smart grid technology and balancing systems\n"
+            "- Decommissioning old fossil fuel power infrastructure"
+        )
+    with col_nf2:
+        st.markdown("**The Germany example (Netzentgelt):**")
+        st.markdown(
+            "Germany's grid tariff (*Netzentgelt*) rose sharply between 2012 and 2018 — "
+            "precisely the years of fastest renewable expansion. "
+            "This made German household electricity prices among the highest in Europe, "
+            "even though Germany was simultaneously reducing its fossil fuel dependency. "
+            "Since 2022, network costs have partially stabilised as grid capacity catches up "
+            "with renewable capacity. The **Price Breakdown chart in Tab 1** shows this "
+            "directly: the 'Energy + Network' line rises independently of fuel prices."
+        )
+
+    st.info(
+        "💡 **For your thesis:** The short-term grid cost increase from renewable investment "
+        "is a confounding factor that should be acknowledged. Countries mid-transition may "
+        "temporarily show higher consumer prices precisely *because* they are investing. "
+        "The long-term picture — lower import dependency, lower fuel price exposure — "
+        "is what your dashboard's 5–10 year view is designed to reveal."
+    )
 
     st.divider()
 
