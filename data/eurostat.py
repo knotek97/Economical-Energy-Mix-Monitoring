@@ -439,19 +439,100 @@ def fetch_household_price_breakdown(
             f"No household price data ({tax_code}) for {eurostat_code} in any band."
         )
 
-    excl = _fetch_component("X_TAX")
-    incl = _fetch_component("I_TAX")
+    # ── Find best band with X_TAX, then use SAME band for I_TAX ──────────────
+    # Critical: using different bands for excl/incl produces nonsensical results
+    # (excl_taxes > incl_taxes) because different household sizes have different
+    # unit economics. We discover the band once, then lock it for both fetches.
+    BAND_PRIORITY = [
+        "KWH2500-4999", "KWH1000-2499", "KWH_LT1000",
+        "KWH5000-14999", "TOT_KWH",
+    ]
 
-    # Align both series to common index
+    def _fetch_band(tax_code: str, band: str) -> "pd.Series | None":
+        """Fetch one specific band for one tax code. Returns None if no data."""
+        url = (
+            f"{EUROSTAT_BASE}/nrg_pc_204"
+            f"?format=JSON&lang=EN"
+            f"&unit=KWH&currency=EUR"
+            f"&tax={tax_code}"
+            f"&nrg_cons={band}"
+            f"&geo={eurostat_code}"
+            f"&lastTimePeriod={last_n}"
+        )
+        try:
+            resp = requests.get(url, timeout=15)
+            resp.raise_for_status()
+            data   = resp.json()
+            dims   = data["id"]
+            sizes  = data["size"]
+            values = data["value"]
+            nrg_labels  = list(data["dimension"]["nrg_cons"]["category"]["label"].keys())
+            time_labels = list(data["dimension"]["time"]["category"]["label"].values())
+            nrg_idx  = dims.index("nrg_cons")
+            time_idx = dims.index("time")
+            strides  = [1] * len(dims)
+            for i in range(len(dims) - 2, -1, -1):
+                strides[i] = strides[i + 1] * sizes[i + 1]
+            raw = {}
+            for b_pos, band_code in enumerate(nrg_labels):
+                if band_code != band:
+                    continue
+                for t_pos, tlabel in enumerate(time_labels):
+                    flat = b_pos * strides[nrg_idx] + t_pos * strides[time_idx]
+                    val  = values.get(str(flat))
+                    if val is not None:
+                        raw[tlabel] = val
+            if not raw:
+                return None
+            sort_items = []
+            for k, v in raw.items():
+                if "S" in k:
+                    try:
+                        y, s = k.split("S", 1)
+                        sort_items.append((int(y), int(s), f"{y}-S{s}", v))
+                    except ValueError:
+                        sort_items.append((9999, 9999, k, v))
+                else:
+                    sort_items.append((9999, 9999, k, v))
+            sort_items.sort(key=lambda x: (x[0], x[1]))
+            return pd.Series(
+                {label: val for _, _, label, val in sort_items},
+                dtype=float,
+            )
+        except Exception:
+            return None
+
+    # Discover best band from X_TAX
+    chosen_band = None
+    excl        = None
+    for band in BAND_PRIORITY:
+        s = _fetch_band("X_TAX", band)
+        if s is not None and len(s) > 0:
+            chosen_band = band
+            excl        = s
+            break
+
+    if chosen_band is None or excl is None:
+        raise ValueError(f"No household price data (X_TAX) for {eurostat_code}.")
+
+    # Fetch I_TAX with the SAME band
+    incl = _fetch_band("I_TAX", chosen_band)
+    if incl is None or len(incl) == 0:
+        raise ValueError(f"No household price data (I_TAX/{chosen_band}) for {eurostat_code}.")
+
+    # Align on common time index
     common = excl.index.intersection(incl.index)
-    excl   = excl.reindex(common)
-    incl   = incl.reindex(common)
-    tax    = (incl - excl).round(4)
+    excl   = excl.reindex(common).round(4)
+    incl   = incl.reindex(common).round(4)
+
+    # Tax burden: incl - excl, clamped to 0 (Eurostat rounding can cause tiny negatives)
+    tax = (incl - excl).clip(lower=0).round(4)
 
     return {
-        "excl_taxes":  excl.round(4),
-        "incl_taxes":  incl.round(4),
+        "excl_taxes":  excl,
+        "incl_taxes":  incl,
         "tax_burden":  tax,
+        "band":        chosen_band,
         "latest_excl": round(float(excl.iloc[-1]), 4) if len(excl) > 0 else None,
         "latest_incl": round(float(incl.iloc[-1]), 4) if len(incl) > 0 else None,
         "latest_tax":  round(float(tax.iloc[-1]),  4) if len(tax)  > 0 else None,
