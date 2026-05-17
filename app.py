@@ -502,10 +502,40 @@ with st.sidebar:
 
     st.divider()
 
-    # Long-term year range
-    st.markdown("**📅 Long-term range**")
-    st.caption("Used in tab 1")
-    long_term_years = st.slider("Years of history", min_value=3, max_value=10, value=5)
+    # ── Long-term start year ───────────────────────────────────────────────────
+    st.markdown("**📅 Long-term start year**")
+    st.caption("Used in Tab 1 & 4. Eurostat data goes back to 1990; ENTSO-E is reliable from 2015.")
+
+    _current_year = date.today().year
+    _year_options = list(range(1990, _current_year))   # 1990 → last year
+    _default_year = 2015
+
+    long_term_start = st.selectbox(
+        "Start year",
+        options=_year_options,
+        index=_year_options.index(_default_year),
+        format_func=lambda y: f"{y}  ({_current_year - y} years)",
+    )
+    long_term_years = _current_year - long_term_start   # keep internal API unchanged
+
+    # ── Data quality disclaimer ────────────────────────────────────────────────
+    if long_term_start < 2015:
+        if long_term_start < 2007:
+            st.warning(
+                "⚠️ **Before 2007:** ENTSO-E data (prices, generation, capacity) "
+                "is largely unavailable. Eurostat import dependency is available "
+                "from 1990; general inflation from 1996. Household electricity "
+                "prices are only available from 2007.",
+                icon=None,
+            )
+        else:
+            st.warning(
+                "⚠️ **2007–2014:** ENTSO-E data (prices, generation, installed "
+                "capacity) may be patchy or missing for this period — it will be "
+                "skipped silently where unavailable. Eurostat data (inflation, "
+                "household prices, import dependency) is reliable from this range.",
+                icon=None,
+            )
 
     st.divider()
 
@@ -589,10 +619,10 @@ if fetch_btn:
     st.session_state.fetch_attempted = True
     # Update URL params so this view can be shared/bookmarked
     new_params = {
-        "country": country_code,
-        "years":   str(long_term_years),
-        "start":   str(start_date),
-        "end":     str(end_date),
+        "country":     country_code,
+        "start_year":  str(long_term_start),
+        "start":       str(start_date),
+        "end":         str(end_date),
     }
     if compare_enabled and compare_code:
         new_params["compare"] = compare_code
@@ -933,7 +963,7 @@ with tab1:
                 <div class="metric-card">
                     <div class="metric-label">Renewable Share Growth</div>
                     <div class="metric-value">{sign}{growth}pp</div>
-                    <div class="metric-unit">over {long_term_years} years</div>
+                    <div class="metric-unit">since {long_term_start}</div>
                 </div>""", unsafe_allow_html=True)
 
             st.markdown("")
@@ -968,6 +998,20 @@ with tab1:
                 xaxis_title="Year",
                 legend=dict(orientation="h", y=-0.2),
             )
+            # Add a shaded region before 2015 when ENTSO-E data may be patchy
+            if long_term_start < 2015:
+                fig_share.add_vrect(
+                    x0=long_term_start, x1=min(2015, _current_year),
+                    fillcolor="rgba(234,179,8,0.08)",
+                    line_width=0,
+                    annotation_text="ENTSO-E data may be patchy before 2015",
+                    annotation_position="top left",
+                    annotation_font=dict(size=10, color="#92400e"),
+                )
+                fig_share.add_vline(
+                    x=2015, line_dash="dot",
+                    line_color="rgba(234,179,8,0.6)", line_width=1,
+                )
             _add_crisis_line(fig_share, cap_re_share.index)
             st.plotly_chart(fig_share, width='stretch')
 
@@ -1037,7 +1081,7 @@ with tab1:
                           annotation_text="ECB 2% target", annotation_position="bottom right")
         fig_inf.add_hline(y=0, line_dash="dash", line_color="#374151", line_width=1)
         fig_inf.update_layout(
-            title=f"Inflation — {country_label} · {long_term_years}-year view (% YoY)",
+            title=f"Inflation — {country_label} · {long_term_start}–{_current_year} (% YoY)",
             template="plotly_white",
             margin=dict(l=0, r=0, t=40, b=0), height=CH_LG,
             yaxis_title="Annual rate of change (%)",
@@ -1191,6 +1235,8 @@ with tab1:
             yaxis_title="%",
             xaxis_title="Year",
         )
+        # Import dependency data from Eurostat goes back to 1990 and is reliable —
+        # no shading needed. The 2022 crisis line is the key annotation here.
         _add_crisis_line(fig_id, import_dep.index)
         st.plotly_chart(fig_id, width='stretch')
     else:
