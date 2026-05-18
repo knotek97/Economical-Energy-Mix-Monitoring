@@ -525,8 +525,11 @@ def fetch_household_price_breakdown(
     excl   = excl.reindex(common).round(4)
     incl   = incl.reindex(common).round(4)
 
-    # Tax burden: incl - excl, clamped to 0 (Eurostat rounding can cause tiny negatives)
-    tax = (incl - excl).clip(lower=0).round(4)
+    # Tax burden: incl - excl
+    # Can be NEGATIVE — this means the government was providing a net subsidy
+    # (e.g. Austria's Stromkostenbremse 2022-2023, Germany's Energiepreisbremse).
+    # A negative value is real, meaningful data — do NOT clip to zero.
+    tax = (incl - excl).round(4)
 
     return {
         "excl_taxes":  excl,

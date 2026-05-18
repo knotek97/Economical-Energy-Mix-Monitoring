@@ -1240,13 +1240,16 @@ with tab1:
 
         st.markdown("")
 
-        # Stacked area: excl_taxes at bottom, tax_burden on top
+        # Detect subsidy periods (semesters where incl_taxes < excl_taxes)
+        subsidy_periods = tax[tax < 0]
+        has_subsidies   = len(subsidy_periods) > 0
+
         fig_bd = go.Figure()
         fig_bd.add_trace(go.Scatter(
             x=excl.index, y=excl.values,
             name="Energy + Network (excl. taxes)",
             fill="tozeroy",
-            fillcolor="rgba(99,102,241,0.15)",
+            fillcolor="rgba(99,102,241,0.12)",
             line=dict(color="#6366f1", width=2),
             mode="lines",
             hovertemplate="%{x}<br>%{y:.4f} €/kWh<extra>Energy + Network</extra>",
@@ -1255,37 +1258,66 @@ with tab1:
             x=incl.index, y=incl.values,
             name="Total price (incl. taxes)",
             fill="tonexty",
-            fillcolor="rgba(245,158,11,0.12)",
+            fillcolor="rgba(245,158,11,0.10)",
             line=dict(color="#f59e0b", width=2),
             mode="lines",
             hovertemplate="%{x}<br>%{y:.4f} €/kWh<extra>Total (incl. taxes)</extra>",
         ))
+        tax_colors = [
+            "rgba(22,163,74,0.7)" if v >= 0 else "rgba(239,68,68,0.7)"
+            for v in tax.values
+        ]
+        fig_bd.add_trace(go.Bar(
+            x=tax.index, y=tax.values,
+            name="Tax burden (+) / Government subsidy (−)",
+            marker_color=tax_colors,
+            yaxis="y2",
+            hovertemplate="%{x}<br>%{y:.4f} €/kWh<extra>Tax / Subsidy</extra>",
+            opacity=0.7,
+        ))
         fig_bd.update_layout(
             title=f"Household Electricity Price Breakdown — {country_label} (€/kWh)",
             template="plotly_white",
-            margin=dict(l=0, r=0, t=40, b=0), height=CH_MD,
-            yaxis_title="€/kWh",
-            xaxis_title="Semester",
-            legend=dict(orientation="h", y=-0.18),
+            margin=dict(l=0, r=0, t=40, b=60), height=CH_LG,
+            yaxis=dict(title="€/kWh", side="left"),
+            yaxis2=dict(
+                title="Tax / Subsidy (€/kWh)",
+                side="right", overlaying="y",
+                showgrid=False, zeroline=True,
+                zerolinecolor="#d1d5db",
+            ),
+            legend=dict(orientation="h", y=-0.2),
         )
         _add_crisis_line(fig_bd, excl.index)
         st.plotly_chart(fig_bd, width='stretch')
 
-        st.caption(
-            "🟦 Blue area = Energy commodity + Network fees (excl. all taxes) · "
-            "🟧 Amber area = Taxes, levies & surcharges · "
-            "The gap between the lines is the total tax/levy burden. "
-            "Network fees are embedded in the blue area and cannot be separately shown via this API."
-        )
+        if has_subsidies:
+            subsidy_list = ", ".join(subsidy_periods.index.tolist())
+            st.caption(
+                "🟦 Blue = Energy + Network (excl. taxes) · "
+                "🟧 Amber = Total price (incl. taxes) · "
+                "🟢 Green bars = Tax burden · 🔴 Red bars = Net government subsidy"
+            )
+            st.info(
+                f"🏛️ **Government subsidy detected** in: **{subsidy_list}**. "
+                "During these periods the government provided direct financial support that "
+                "reduced the total consumer price BELOW the base energy+network cost. "
+                "This is a direct policy response to energy price shocks — not a data error. "
+                "Examples: Austria's *Stromkostenbremse*, Germany's *Energiepreisbremse* (2022–2023)."
+            )
+        else:
+            st.caption(
+                "🟦 Blue = Energy + Network (excl. taxes) · "
+                "🟧 Amber = Total price (incl. taxes) · "
+                "🟢 Green bars = Tax & levy burden per semester · "
+                "Network fees are embedded in the blue area."
+            )
 
-        # Germany-specific note
         if "DE" in (entsoe_to_eurostat(country_code) or ""):
             st.info(
                 "🇩🇪 **Germany note:** Germany's 'Energy + Network' price rose significantly "
-                "between 2012–2018 despite falling fossil fuel costs. This reflects the "
-                "*Netzentgelt* (grid tariff) increase driven by the Energiewende grid expansion "
-                "— a short-term cost of long-term renewable infrastructure investment. "
-                "Since 2022, network costs have partially stabilised as grid capacity catches up."
+                "between 2012–2018 despite falling fossil fuel costs — the *Netzentgelt* "
+                "grid tariff from Energiewende infrastructure investment."
             )
     else:
         st.info("Household price breakdown unavailable for this country.")
