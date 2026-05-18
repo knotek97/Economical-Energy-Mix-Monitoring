@@ -1950,9 +1950,15 @@ with tab4:
         )
 
         # ── Score summary ──────────────────────────────────────────────────────
-        # Compute wins/losses across all available metrics before rendering anything
-        _scores = {country_label: 0, compare_label: 0}
-        _total  = 0
+        # Two separate scoreboards: structural (long-term) and operational (short-term)
+        # Mixing them would be misleading — a windy week can inflate short-term
+        # renewable generation share with no connection to structural investment.
+        _lt_scores  = {country_label: 0, compare_label: 0}  # long-term
+        _lt_total   = 0
+        _st_scores  = {country_label: 0, compare_label: 0}  # short-term
+        _st_total   = 0
+        _lt_metrics = []  # list of (metric, winner, detail)
+        _st_metrics = []
 
         def _get_cap_share(cap_df):
             if cap_df is None or cap_df.empty:
@@ -1970,110 +1976,117 @@ with tab4:
         cap_a_score = _get_cap_share(capacity)
         cap_b_score = _get_cap_share(cmp_capacity)
         if cap_a_score is not None and cap_b_score is not None:
-            _total += 1
+            _lt_total += 1
             if cap_a_score > cap_b_score:
-                _scores[country_label] += 1
-                _metrics.append(("🔋 Renewable Capacity", country_label, f"{cap_a_score:.1f}% vs {cap_b_score:.1f}%"))
+                _lt_scores[country_label] += 1
+                _lt_metrics.append(("🔋 Renewable Capacity", country_label, f"{cap_a_score:.1f}% vs {cap_b_score:.1f}%"))
             elif cap_b_score > cap_a_score:
-                _scores[compare_label] += 1
-                _metrics.append(("🔋 Renewable Capacity", compare_label, f"{cap_b_score:.1f}% vs {cap_a_score:.1f}%"))
+                _lt_scores[compare_label] += 1
+                _lt_metrics.append(("🔋 Renewable Capacity", compare_label, f"{cap_b_score:.1f}% vs {cap_a_score:.1f}%"))
 
         re_a_score = renewable_share(gen)     if gen     is not None else None
         re_b_score = renewable_share(cmp_gen) if cmp_gen is not None else None
         if re_a_score is not None and re_b_score is not None:
-            _total += 1
+            _st_total += 1
             if re_a_score > re_b_score:
-                _scores[country_label] += 1
-                _metrics.append(("🌱 Generation Share", country_label, f"{re_a_score}% vs {re_b_score}%"))
+                _st_scores[country_label] += 1
+                _st_metrics.append(("🌱 Generation Share", country_label, f"{re_a_score}% vs {re_b_score}%"))
             elif re_b_score > re_a_score:
-                _scores[compare_label] += 1
-                _metrics.append(("🌱 Generation Share", compare_label, f"{re_b_score}% vs {re_a_score}%"))
+                _st_scores[compare_label] += 1
+                _st_metrics.append(("🌱 Generation Share", compare_label, f"{re_b_score}% vs {re_a_score}%"))
 
         vol_a_score = price_volatility(prices)     if prices     is not None else None
         vol_b_score = price_volatility(cmp_prices) if cmp_prices is not None else None
         if vol_a_score is not None and vol_b_score is not None:
-            _total += 1
+            _st_total += 1
             if vol_a_score < vol_b_score:
-                _scores[country_label] += 1
-                _metrics.append(("📉 Price Volatility", country_label, f"{vol_a_score} vs {vol_b_score} €/MWh σ"))
+                _st_scores[country_label] += 1
+                _st_metrics.append(("📉 Price Volatility", country_label, f"{vol_a_score} vs {vol_b_score} €/MWh σ"))
             elif vol_b_score < vol_a_score:
-                _scores[compare_label] += 1
-                _metrics.append(("📉 Price Volatility", compare_label, f"{vol_b_score} vs {vol_a_score} €/MWh σ"))
+                _st_scores[compare_label] += 1
+                _st_metrics.append(("📉 Price Volatility", compare_label, f"{vol_b_score} vs {vol_a_score} €/MWh σ"))
 
         if inflation is not None and cmp_inflation is not None:
-            _total += 2
+            _lt_total += 2
             if inflation["latest_cpi"] < cmp_inflation["latest_cpi"]:
-                _scores[country_label] += 1
-                _metrics.append(("🏷️ General CPI", country_label,
+                _lt_scores[country_label] += 1
+                _lt_metrics.append(("🏷️ General CPI", country_label,
                     f"{inflation['latest_cpi']:+.1f}% vs {cmp_inflation['latest_cpi']:+.1f}%"))
             else:
-                _scores[compare_label] += 1
-                _metrics.append(("🏷️ General CPI", compare_label,
+                _lt_scores[compare_label] += 1
+                _lt_metrics.append(("🏷️ General CPI", compare_label,
                     f"{cmp_inflation['latest_cpi']:+.1f}% vs {inflation['latest_cpi']:+.1f}%"))
             if inflation["latest_energy"] < cmp_inflation["latest_energy"]:
-                _scores[country_label] += 1
-                _metrics.append(("⚡ Energy CPI", country_label,
+                _lt_scores[country_label] += 1
+                _lt_metrics.append(("⚡ Energy CPI", country_label,
                     f"{inflation['latest_energy']:+.1f}% vs {cmp_inflation['latest_energy']:+.1f}%"))
             else:
-                _scores[compare_label] += 1
-                _metrics.append(("⚡ Energy CPI", compare_label,
+                _lt_scores[compare_label] += 1
+                _lt_metrics.append(("⚡ Energy CPI", compare_label,
                     f"{cmp_inflation['latest_energy']:+.1f}% vs {inflation['latest_energy']:+.1f}%"))
 
         if import_dep is not None and cmp_import_dep is not None and len(import_dep) > 0 and len(cmp_import_dep) > 0:
-            _total += 1
+            _lt_total += 1
             if import_dep.iloc[-1] < cmp_import_dep.iloc[-1]:
-                _scores[country_label] += 1
-                _metrics.append(("🛢️ Import Dependency", country_label,
+                _lt_scores[country_label] += 1
+                _lt_metrics.append(("🛢️ Import Dependency", country_label,
                     f"{import_dep.iloc[-1]:.1f}% vs {cmp_import_dep.iloc[-1]:.1f}%"))
             elif cmp_import_dep.iloc[-1] < import_dep.iloc[-1]:
-                _scores[compare_label] += 1
-                _metrics.append(("🛢️ Import Dependency", compare_label,
+                _lt_scores[compare_label] += 1
+                _lt_metrics.append(("🛢️ Import Dependency", compare_label,
                     f"{cmp_import_dep.iloc[-1]:.1f}% vs {import_dep.iloc[-1]:.1f}%"))
 
         if household_price is not None and cmp_household_price is not None and len(household_price) > 0 and len(cmp_household_price) > 0:
-            _total += 1
+            _lt_total += 1
             if household_price.iloc[-1] < cmp_household_price.iloc[-1]:
-                _scores[country_label] += 1
-                _metrics.append(("🔌 Household Price", country_label,
+                _lt_scores[country_label] += 1
+                _lt_metrics.append(("🔌 Household Price", country_label,
                     f"{household_price.iloc[-1]:.4f} vs {cmp_household_price.iloc[-1]:.4f} €/kWh"))
             elif cmp_household_price.iloc[-1] < household_price.iloc[-1]:
-                _scores[compare_label] += 1
-                _metrics.append(("🔌 Household Price", compare_label,
+                _lt_scores[compare_label] += 1
+                _lt_metrics.append(("🔌 Household Price", compare_label,
                     f"{cmp_household_price.iloc[-1]:.4f} vs {household_price.iloc[-1]:.4f} €/kWh"))
 
-        # Render the scoreboard
-        if _total > 0:
-            sc_a = _scores[country_label]
-            sc_b = _scores[compare_label]
-            overall_winner = country_label if sc_a > sc_b else (compare_label if sc_b > sc_a else None)
-
+        # ── Render long-term scoreboard ────────────────────────────────────────
+        def _render_scoreboard(scores, total, metrics, label_a, label_b, title, subtitle):
+            if total == 0:
+                return
+            sc_a   = scores[label_a]
+            sc_b   = scores[label_b]
+            winner = label_a if sc_a > sc_b else (label_b if sc_b > sc_a else None)
             sb1, sb2, sb3 = st.columns(3)
             sb1.markdown(cmp_card(
-                country_label, f"{sc_a} / {_total}", "metrics won",
+                label_a, f"{sc_a} / {total}", f"{title} metrics won",
                 "win" if sc_a > sc_b else ("loss" if sc_a < sc_b else "neutral")
             ), unsafe_allow_html=True)
             sb2.markdown(cmp_card(
-                compare_label, f"{sc_b} / {_total}", "metrics won",
+                label_b, f"{sc_b} / {total}", f"{title} metrics won",
                 "win" if sc_b > sc_a else ("loss" if sc_b < sc_a else "neutral")
             ), unsafe_allow_html=True)
-            if overall_winner:
+            if winner:
                 sb3.markdown(cmp_card(
-                    "Overall Leader", overall_winner, "wins more metrics",
-                    result="overall",
+                    f"{title} Leader", winner, subtitle, result="overall"
                 ), unsafe_allow_html=True)
             else:
-                sb3.markdown(cmp_card("Overall", "Tied", f"{sc_a}–{sc_b}"), unsafe_allow_html=True)
-
-            with st.expander("📋 Metric breakdown"):
-                for metric, winner, detail in _metrics:
+                sb3.markdown(cmp_card(f"{title}", "Tied", f"{sc_a}–{sc_b}"), unsafe_allow_html=True)
+            with st.expander(f"📋 {title} metric breakdown"):
+                for metric, win, detail in metrics:
                     st.markdown(
-                        f"**{metric}** → 🟢 {winner} &nbsp;&nbsp; <span style='color:#6b7280;font-size:0.85rem'>{detail}</span>",
+                        f"**{metric}** → 🟢 {win} &nbsp;&nbsp; "
+                        f"<span style='color:#6b7280;font-size:0.85rem'>{detail}</span>",
                         unsafe_allow_html=True,
                     )
 
-            # ── #8 Auto-generated causal narrative ────────────────────────────
-            st.markdown('<div class="section-title">📝 Causal Chain Assessment</div>', unsafe_allow_html=True)
+        st.markdown("#### 📊 Structural Scorecard")
+        _render_scoreboard(
+            _lt_scores, _lt_total, _lt_metrics,
+            country_label, compare_label,
+            "Structural", "wins on long-term investment indicators",
+        )
 
+        # ── Auto-generated causal narrative ────────────────────────────────────
+        if _lt_total > 0:
+            st.markdown('<div class="section-title">📝 Causal Chain Assessment</div>', unsafe_allow_html=True)
             _lines = []
 
             # Renewable capacity
@@ -2150,7 +2163,42 @@ with tab4:
                 st.markdown(line)
                 st.markdown("")
 
+        # ── Short-term operational scorecard ───────────────────────────────────
+        if _st_total > 0:
+            st.markdown("#### ⚡ Operational Scorecard")
+            st.caption(
+                f"Based on {start_date} → {end_date} · "
+                "⚠️ Weather and seasonality heavily influence these metrics — "
+                "do not use for structural conclusions."
+            )
+            _render_scoreboard(
+                _st_scores, _st_total, _st_metrics,
+                country_label, compare_label,
+                "Operational", "wins on short-term market metrics",
+            )
+
         st.divider()
+
+        # ══════════════════════════════════════════════════════════════════════
+        # LONG-TERM STRUCTURAL METRICS
+        # ══════════════════════════════════════════════════════════════════════
+        st.markdown(f"""
+        <div style='background:linear-gradient(135deg,#eef2ff 0%,#e0e7ff 100%);
+                    border-left:4px solid #6366f1; border-radius:8px;
+                    padding:0.8rem 1.2rem; margin-bottom:1rem;'>
+            <span style='font-size:1rem; font-weight:700; color:#3730a3;'>
+                📊 Long-term Structural Metrics
+            </span>
+            <span style='font-size:0.78rem; color:#6366f1; font-family:DM Mono,monospace;
+                         margin-left:0.8rem;'>
+                {long_term_start} → {_current_year}
+            </span><br>
+            <span style='font-size:0.78rem; color:#4338ca; line-height:1.6;'>
+                Based on installed capacity, Eurostat economic data, and household prices.
+                Reflects structural investment decisions — not weather or short-term market conditions.
+            </span>
+        </div>
+        """, unsafe_allow_html=True)
 
         # ── Renewable capacity share comparison ────────────────────────────────
         st.markdown('<div class="section-title">🔋 Installed Renewable Capacity Share</div>', unsafe_allow_html=True)
@@ -2189,6 +2237,31 @@ with tab4:
                 r3.markdown(cmp_card("Difference", f"{abs(diff):.1f}pp", f"{leader} leads"), unsafe_allow_html=True)
         else:
             st.info("Installed capacity data unavailable for one or both countries.")
+
+        st.divider()
+
+        # ══════════════════════════════════════════════════════════════════════
+        # SHORT-TERM OPERATIONAL METRICS
+        # ══════════════════════════════════════════════════════════════════════
+        st.markdown(f"""
+        <div style='background:linear-gradient(135deg,#fff7ed 0%,#ffedd5 100%);
+                    border-left:4px solid #f59e0b; border-radius:8px;
+                    padding:0.8rem 1.2rem; margin-bottom:1rem;'>
+            <span style='font-size:1rem; font-weight:700; color:#92400e;'>
+                ⚡ Short-term Operational Metrics
+            </span>
+            <span style='font-size:0.78rem; color:#d97706; font-family:DM Mono,monospace;
+                         margin-left:0.8rem;'>
+                {start_date} → {end_date}
+            </span><br>
+            <span style='font-size:0.78rem; color:#b45309; line-height:1.6;'>
+                Based on ENTSO-E day-ahead prices and actual generation data for the selected date range.
+                ⚠️ These metrics are heavily influenced by weather, seasonality, and short-term demand —
+                <strong>not</strong> suitable for conclusions about structural investment.
+                Use the long-term metrics above for structural comparisons.
+            </span>
+        </div>
+        """, unsafe_allow_html=True)
 
         # ── Renewable generation share comparison ──────────────────────────────
         st.markdown('<div class="section-title">🌱 Renewable Generation Share (selected period)</div>', unsafe_allow_html=True)
