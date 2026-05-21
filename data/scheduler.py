@@ -40,6 +40,7 @@ TOP_COUNTRIES = [
     "NL",       # Netherlands
     "DK",       # Denmark      (wind leader — prices fetched via DK_1 zone)
     "CZ",       # Czech Republic
+    "CH",       # Switzerland  (hydro-dominated, non-EU)
     "IT_NORD",  # Italy North  (correct entsoe-py code — was mistakenly IT_NORTH)
 ]
 

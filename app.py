@@ -17,6 +17,7 @@ import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
 from datetime import date, timedelta
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 from data.fetcher import (
     fetch_day_ahead_prices,
@@ -328,6 +329,109 @@ def _metric_cols(n: int):
     return st.columns(n)
 
 
+# ── European overview metric extractors ───────────────────────────────────────
+# These functions take a country code and return ONE scalar metric value,
+# or None if the data isn't available. Used by the multi-country ranking chart.
+# They rely on the SQLite cache — fresh fetches happen only for uncached
+# countries, which is rare since the scheduler pre-fetches the top set.
+
+def _overview_capacity_share(country_code: str, n_years: int) -> float | None:
+    """Latest renewable installed capacity share (%) for one country."""
+    try:
+        cap = fetch_installed_capacity(country_code, n_years)
+        if cap is None or cap.empty:
+            return None
+        re_cols = [c for c in cap.columns if c in RENEWABLE_SOURCES]
+        if not re_cols:
+            return None
+        tot = cap.sum(axis=1)
+        re  = cap[re_cols].sum(axis=1)
+        share = (re / tot * 100)
+        return round(float(share.iloc[-1]), 1) if len(share) > 0 else None
+    except Exception:
+        return None
+
+
+def _overview_import_dep(country_code: str, n_years: int) -> float | None:
+    """Latest energy import dependency (%) for one country."""
+    try:
+        s = fetch_energy_import_dependency(country_code, n_years=n_years)
+        return round(float(s.iloc[-1]), 1) if s is not None and len(s) > 0 else None
+    except Exception:
+        return None
+
+
+def _overview_energy_cpi(country_code: str, n_years: int) -> float | None:
+    """Latest energy CPI (% YoY) for one country."""
+    try:
+        d = fetch_inflation(country_code, n_years=n_years)
+        return round(float(d["latest_energy"]), 1) if d and d.get("latest_energy") is not None else None
+    except Exception:
+        return None
+
+
+def _overview_household_price(country_code: str, n_years: int) -> float | None:
+    """Latest household electricity price (€/kWh, excl. taxes) for one country."""
+    try:
+        s = fetch_household_electricity_price(country_code, n_years=n_years)
+        return round(float(s.iloc[-1]), 4) if s is not None and len(s) > 0 else None
+    except Exception:
+        return None
+
+
+# Metric registry: defines all overview metrics with their config
+OVERVIEW_METRICS = {
+    "🔋 Renewable Capacity Share": {
+        "fn":         _overview_capacity_share,
+        "unit":       "% of installed capacity",
+        "format":     "{:.1f}%",
+        "lower_better": False,   # higher share = more renewable investment
+        "x_title":    "Renewable Capacity Share (%)",
+    },
+    "🛢️ Energy Import Dependency": {
+        "fn":         _overview_import_dep,
+        "unit":       "% of total energy",
+        "format":     "{:.1f}%",
+        "lower_better": True,    # lower = more energy independent
+        "x_title":    "Import Dependency (%)",
+    },
+    "⚡ Energy CPI (latest YoY)": {
+        "fn":         _overview_energy_cpi,
+        "unit":       "% YoY",
+        "format":     "{:+.1f}%",
+        "lower_better": True,    # lower = less inflation pressure
+        "x_title":    "Energy CPI (% YoY)",
+    },
+    "🔌 Household Electricity Price": {
+        "fn":         _overview_household_price,
+        "unit":       "€/kWh excl. taxes",
+        "format":     "{:.4f}",
+        "lower_better": True,    # lower = cheaper for consumers
+        "x_title":    "Household Price (€/kWh)",
+    },
+}
+
+
+@st.cache_data(ttl=1800, show_spinner=False)
+def _compute_overview(metric_name: str, n_years: int, countries: tuple) -> dict:
+    """
+    Fetch one metric across all overview countries in parallel.
+    Cached for 30 minutes — the underlying data is cached longer, but
+    this avoids re-running the parallel orchestration on every Streamlit re-run.
+    """
+    fn = OVERVIEW_METRICS[metric_name]["fn"]
+    results = {}
+    with ThreadPoolExecutor(max_workers=6) as pool:
+        futures = {pool.submit(fn, cc, n_years): cc for cc in countries}
+        for f in as_completed(futures):
+            cc = futures[f]
+            try:
+                results[cc] = f.result()
+            except Exception:
+                results[cc] = None
+    return results
+
+
 def _stale_banner(fetched_country_code: str | None, current_country_code: str,
                   current_label: str, fetched_label: str | None,
                   fetched_start: str | None = None, fetched_end: str | None = None,
@@ -444,6 +548,22 @@ COUNTRIES = {
     "Norway":                "NO",
     "Great Britain":         "GB",
 }
+
+# ── European overview reference set ───────────────────────────────────────────
+# Countries shown in the multi-country ranking chart at the top of Tab 4.
+# This is the same set the scheduler pre-fetches every 2 hours, so for most
+# users these will be cache hits and load instantly.
+# Order doesn't matter — the chart sorts by metric value.
+OVERVIEW_COUNTRIES = [
+    "DE_LU", "FR", "ES", "PL", "AT", "BE",
+    "NL", "DK", "CZ", "CH", "IT_NORD",
+    "PT", "SK", "HU",
+]
+
+
+# ── Reverse lookup: ENTSO-E code → display label ──────────────────────────────
+CODE_TO_LABEL = {v: k for k, v in COUNTRIES.items()}
+
 
 # ── URL params → sidebar default index ────────────────────────────────────────
 # Computed here (after COUNTRIES, before sidebar) so the selectbox can use it.
@@ -854,11 +974,11 @@ if all(v is None for v in [prices, gen, inflation, capacity]):
             "compare": "CZ",
         },
         {
-            "label":   "🇦🇹 Austria vs Belgium",
-            "subtitle": "Hydro-rich vs mixed energy mix",
-            "detail":  "Austria generates most electricity from hydro. Belgium uses nuclear + gas. Both have low fossil exposure but via different routes.",
-            "country": "AT",
-            "compare": "BE",
+            "label":   "🇨🇭 Switzerland vs Austria",
+            "subtitle": "Hydro-dominated alpine economies",
+            "detail":  "Both Switzerland and Austria rely heavily on hydro power. Compare how two similar geographies achieve low fossil dependency — and how Switzerland (non-EU) differs in market integration and household prices.",
+            "country": "CH",
+            "compare": "AT",
         },
     ]
 
@@ -1948,6 +2068,95 @@ with tab4:
             f"</div>",
             unsafe_allow_html=True,
         )
+
+        # ══════════════════════════════════════════════════════════════════════
+        # EUROPEAN OVERVIEW — multi-country ranking with highlighted selection
+        # ══════════════════════════════════════════════════════════════════════
+        st.markdown('<div class="section-title">🌍 European Overview</div>', unsafe_allow_html=True)
+        st.caption(
+            "Where your two selected countries sit in the broader European landscape. "
+            "Switch metric below — your selected countries are highlighted in colour."
+        )
+
+        ov_metric = st.selectbox(
+            "Ranking metric",
+            options=list(OVERVIEW_METRICS.keys()),
+            index=0,
+            key="overview_metric_select",
+            label_visibility="collapsed",
+        )
+
+        # Ensure both selected countries are included even if not in OVERVIEW_COUNTRIES
+        _overview_set = list(dict.fromkeys(
+            OVERVIEW_COUNTRIES + [country_code] + ([compare_code] if compare_code else [])
+        ))
+
+        with st.spinner(f"Loading European overview — {ov_metric}…"):
+            ov_results = _compute_overview(
+                ov_metric, long_term_years, tuple(_overview_set)
+            )
+
+        # Filter to countries with valid data and sort
+        valid = {cc: v for cc, v in ov_results.items() if v is not None}
+        if not valid:
+            st.info(f"No data available across European countries for {ov_metric}.")
+        else:
+            cfg = OVERVIEW_METRICS[ov_metric]
+            sorted_items = sorted(
+                valid.items(),
+                key=lambda x: x[1],
+                reverse=not cfg["lower_better"],   # lower_better=True → ascending
+            )
+
+            # Build colour and border arrays — highlight selected countries
+            colours, borders, labels, values, text_labels = [], [], [], [], []
+            for cc, val in sorted_items:
+                label = CODE_TO_LABEL.get(cc, cc)
+                labels.append(label)
+                values.append(val)
+                text_labels.append(cfg["format"].format(val))
+                if cc == country_code:
+                    colours.append("#6366f1")   # primary — indigo
+                    borders.append("#3730a3")
+                elif cc == compare_code:
+                    colours.append("#f59e0b")   # compare — amber
+                    borders.append("#92400e")
+                else:
+                    colours.append("#cbd5e1")   # everyone else — muted grey
+                    borders.append("#94a3b8")
+
+            fig_ov = go.Figure(go.Bar(
+                x=values, y=labels,
+                orientation="h",
+                marker=dict(color=colours, line=dict(color=borders, width=1)),
+                text=text_labels,
+                textposition="outside",
+                hovertemplate="<b>%{y}</b><br>" + cfg["x_title"] + ": %{text}<extra></extra>",
+            ))
+            fig_ov.update_layout(
+                template="plotly_white",
+                margin=dict(l=0, r=20, t=10, b=10),
+                height=max(CH_MD, 28 * len(labels) + 60),
+                xaxis_title=cfg["x_title"],
+                yaxis=dict(autorange="reversed"),   # best at top
+                showlegend=False,
+            )
+            st.plotly_chart(fig_ov, width='stretch')
+
+            # Position summary for the two selected countries
+            sel_ranks = []
+            for i, (cc, _) in enumerate(sorted_items, start=1):
+                if cc in (country_code, compare_code):
+                    sel_ranks.append((cc, i, len(sorted_items)))
+            if sel_ranks:
+                msgs = []
+                for cc, rank, total in sel_ranks:
+                    label = CODE_TO_LABEL.get(cc, cc)
+                    msgs.append(f"**{label}** ranks **{rank} of {total}**")
+                arrow = "⬆️ higher is better" if not cfg["lower_better"] else "⬇️ lower is better"
+                st.caption(f"{arrow} · " + " · ".join(msgs))
+
+        st.divider()
 
         # ── Score summary ──────────────────────────────────────────────────────
         # Two separate scoreboards: structural (long-term) and operational (short-term)
