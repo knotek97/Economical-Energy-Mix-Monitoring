@@ -565,19 +565,39 @@ OVERVIEW_COUNTRIES = [
 CODE_TO_LABEL = {v: k for k, v in COUNTRIES.items()}
 
 
-# ── URL params → sidebar default index ────────────────────────────────────────
-# Computed here (after COUNTRIES, before sidebar) so the selectbox can use it.
+# ── URL params → sidebar defaults ─────────────────────────────────────────────
+# Computed here (after COUNTRIES, before sidebar) so selectboxes can use them.
 # Only applied on first load — once the user has clicked Fetch, the sidebar
-# selection always wins and the URL is updated to match.
+# always wins and the URL is updated to match.
 _qp          = st.query_params
 _first_load  = not st.session_state.get("fetch_attempted", False)
-_default_idx = 0
+_default_idx         = 0
+_default_compare_idx = 0
+_default_compare_on  = False
 
-if _first_load and "country" in _qp:
-    _code    = _qp.get("country", "")
-    _matched = [k for k, v in COUNTRIES.items() if v == _code]
-    if _matched:
-        _default_idx = list(COUNTRIES.keys()).index(_matched[0])
+if _first_load:
+    # Primary country
+    if "country" in _qp:
+        _code    = _qp.get("country", "")
+        _matched = [k for k, v in COUNTRIES.items() if v == _code]
+        if _matched:
+            _default_idx = list(COUNTRIES.keys()).index(_matched[0])
+
+    # Comparison country — pre-select AND enable the toggle
+    if "compare" in _qp:
+        _cmp_code    = _qp.get("compare", "")
+        _cmp_matched = [k for k, v in COUNTRIES.items() if v == _cmp_code]
+        if _cmp_matched:
+            _default_compare_on  = True
+            # Build compare_options without primary (same logic as sidebar below)
+            _primary_label       = list(COUNTRIES.keys())[_default_idx]
+            _compare_options_tmp = [k for k in COUNTRIES if k != _primary_label]
+            if _cmp_matched[0] in _compare_options_tmp:
+                _default_compare_idx = _compare_options_tmp.index(_cmp_matched[0])
+
+    # Pre-set the toggle state via session state so it renders open
+    if _default_compare_on and not st.session_state.get("compare_toggle"):
+        st.session_state["compare_toggle"] = True
 
 
 # ── Sidebar ───────────────────────────────────────────────────────────────────
@@ -593,13 +613,17 @@ with st.sidebar:
 
     st.divider()
 
-    # Comparison toggle
+    # Comparison toggle — key links it to session state so URL params can pre-open it
     st.markdown("**🔀 Compare with**")
-    compare_enabled = st.toggle("Enable comparison", value=False)
+    compare_enabled = st.toggle("Enable comparison", key="compare_toggle")
     if compare_enabled:
         compare_options = {k: v for k, v in COUNTRIES.items() if k != country_label}
-        compare_label   = st.selectbox("🌍 Compare country", list(compare_options.keys()), index=0)
-        compare_code    = compare_options[compare_label]
+        compare_label   = st.selectbox(
+            "🌍 Compare country",
+            list(compare_options.keys()),
+            index=min(_default_compare_idx, len(compare_options) - 1),
+        )
+        compare_code = compare_options[compare_label]
     else:
         compare_label = compare_code = None
 
