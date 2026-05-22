@@ -2767,7 +2767,8 @@ with tab4:
                 xaxis_title="Year",
                 legend=dict(orientation="h", y=-0.18),
             )
-            _add_crisis_line(fig_id_cmp, import_dep.index)
+            _id_index = (import_dep if import_dep is not None else cmp_import_dep).index
+            _add_crisis_line(fig_id_cmp, _id_index)
             st.plotly_chart(fig_id_cmp, width='stretch')
 
             # Trend summary: is each country becoming more or less dependent?
