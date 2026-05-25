@@ -712,10 +712,14 @@ with st.sidebar:
     default_e = today - timedelta(days=1)
 
     # ── Preset buttons ─────────────────────────────────────────────────────────
-    # Initialise session state on first run; presets write here and trigger rerun
-    if "preset_start" not in st.session_state:
-        st.session_state.preset_start = default_s
-        st.session_state.preset_end   = default_e
+    # Buttons write DIRECTLY to the date_input widgets' session state keys.
+    # Critical: Streamlit ignores the `value=` parameter on any widget that
+    # already has its key in session state — so we must update the widget's
+    # actual key (`date_start_input`/`date_end_input`), not a separate variable.
+    if "date_start_input" not in st.session_state:
+        st.session_state.date_start_input = default_s
+    if "date_end_input" not in st.session_state:
+        st.session_state.date_end_input = default_e
 
     st.caption("Quick presets")
     pcol1, pcol2, pcol3, pcol4 = st.columns(4)
@@ -732,19 +736,18 @@ with st.sidebar:
     ]
     for label, col, start in _presets:
         if col.button(label, key=f"preset_{label}", width="stretch"):
-            st.session_state.preset_start = start
-            st.session_state.preset_end   = today - timedelta(days=1)
+            st.session_state.date_start_input = start
+            st.session_state.date_end_input   = today - timedelta(days=1)
             st.rerun()
 
+    # Date inputs — no `value=` parameter, since session state owns the value
     start_date = st.date_input(
         "Start date",
-        value=st.session_state.preset_start,
         min_value=date(2015, 1, 1), max_value=today,
         key="date_start_input",
     )
     end_date = st.date_input(
         "End date",
-        value=st.session_state.preset_end,
         min_value=date(2015, 1, 1), max_value=today,
         key="date_end_input",
     )
