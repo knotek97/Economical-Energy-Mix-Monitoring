@@ -517,6 +517,81 @@ def cmp_card(label: str, value: str, unit: str, result: str = "neutral") -> str:
     </div>"""
 
 
+def cmp_row(
+    metric_emoji: str, metric_label: str,
+    label_a: str, val_a, label_b: str, val_b,
+    fmt: str = "{:.1f}",
+    unit: str = "",
+    lower_better: bool = False,
+    detail_a: str = "", detail_b: str = "",
+) -> str:
+    """
+    Render one metric as a compact horizontal row with both countries side by side.
+    Cleaner than three separate cards when you have many metrics to compare.
+
+    Layout:
+      [emoji metric_label]   |  Country A: 45.2% (win)  |  Country B: 12.3% (loss)  |  Δ +32.9pp
+    """
+    if val_a is None or val_b is None:
+        return ""
+
+    a_wins = (val_a < val_b) if lower_better else (val_a > val_b)
+    b_wins = (val_b < val_a) if lower_better else (val_b > val_a)
+    diff   = abs(val_a - val_b)
+    leader = label_a if a_wins else (label_b if b_wins else "—")
+
+    color_a = "#16a34a" if a_wins else ("#dc2626" if b_wins else "#6b7280")
+    color_b = "#16a34a" if b_wins else ("#dc2626" if a_wins else "#6b7280")
+    icon_a  = "🟢" if a_wins else ("🔴" if b_wins else "⚪")
+    icon_b  = "🟢" if b_wins else ("🔴" if a_wins else "⚪")
+
+    return f"""
+    <div style='background:#ffffff; border:1px solid #e5e7eb; border-radius:10px;
+                padding:0.8rem 1.2rem; margin-bottom:0.5rem;
+                box-shadow:0 1px 2px rgba(0,0,0,0.04);
+                display:grid; grid-template-columns: 2fr 2fr 2fr 1.5fr; gap:1rem; align-items:center;'>
+        <div>
+            <div style='font-size:0.95rem; font-weight:600; color:#1f2937;'>
+                {metric_emoji} {metric_label}
+            </div>
+            <div style='font-size:0.7rem; color:#9ca3af; font-family:DM Mono,monospace;
+                        margin-top:0.1rem;'>
+                {"↓ lower is better" if lower_better else "↑ higher is better"}
+            </div>
+        </div>
+        <div>
+            <div style='font-size:0.72rem; color:#6b7280; font-family:DM Mono,monospace;'>
+                {label_a}
+            </div>
+            <div style='font-size:1.15rem; font-weight:700; color:{color_a};'>
+                {icon_a} {fmt.format(val_a)}{unit}
+            </div>
+            <div style='font-size:0.68rem; color:#9ca3af;'>{detail_a}</div>
+        </div>
+        <div>
+            <div style='font-size:0.72rem; color:#6b7280; font-family:DM Mono,monospace;'>
+                {label_b}
+            </div>
+            <div style='font-size:1.15rem; font-weight:700; color:{color_b};'>
+                {icon_b} {fmt.format(val_b)}{unit}
+            </div>
+            <div style='font-size:0.68rem; color:#9ca3af;'>{detail_b}</div>
+        </div>
+        <div style='text-align:right;'>
+            <div style='font-size:0.7rem; color:#6b7280; font-family:DM Mono,monospace;'>
+                Δ
+            </div>
+            <div style='font-size:1rem; font-weight:600; color:#92400e;'>
+                {diff:.2f}{unit}
+            </div>
+            <div style='font-size:0.68rem; color:#9ca3af;'>
+                {leader} leads
+            </div>
+        </div>
+    </div>
+    """
+
+
 # ── Countries ─────────────────────────────────────────────────────────────────
 COUNTRIES = {
     # Tier 1 — Most reliable
@@ -636,10 +711,43 @@ with st.sidebar:
     default_s = today - timedelta(days=30)
     default_e = today - timedelta(days=1)
 
-    start_date = st.date_input("Start date", value=default_s,
-                               min_value=date(2015, 1, 1), max_value=today)
-    end_date   = st.date_input("End date",   value=default_e,
-                               min_value=date(2015, 1, 1), max_value=today)
+    # ── Preset buttons ─────────────────────────────────────────────────────────
+    # Initialise session state on first run; presets write here and trigger rerun
+    if "preset_start" not in st.session_state:
+        st.session_state.preset_start = default_s
+        st.session_state.preset_end   = default_e
+
+    st.caption("Quick presets")
+    pcol1, pcol2, pcol3, pcol4 = st.columns(4)
+    pcol5, pcol6, pcol7, pcol8 = st.columns(4)
+    _presets = [
+        ("7d",   pcol1, today - timedelta(days=7)),
+        ("30d",  pcol2, today - timedelta(days=30)),
+        ("3m",   pcol3, today - timedelta(days=90)),
+        ("6m",   pcol4, today - timedelta(days=180)),
+        ("1y",   pcol5, today - timedelta(days=365)),
+        ("2y",   pcol6, today - timedelta(days=730)),
+        ("YTD",  pcol7, date(today.year, 1, 1)),
+        ("All",  pcol8, date(2015, 1, 1)),
+    ]
+    for label, col, start in _presets:
+        if col.button(label, key=f"preset_{label}", width="stretch"):
+            st.session_state.preset_start = start
+            st.session_state.preset_end   = today - timedelta(days=1)
+            st.rerun()
+
+    start_date = st.date_input(
+        "Start date",
+        value=st.session_state.preset_start,
+        min_value=date(2015, 1, 1), max_value=today,
+        key="date_start_input",
+    )
+    end_date = st.date_input(
+        "End date",
+        value=st.session_state.preset_end,
+        min_value=date(2015, 1, 1), max_value=today,
+        key="date_end_input",
+    )
 
     if start_date >= end_date:
         st.error("End date must be after start date.")
@@ -702,41 +810,44 @@ with st.sidebar:
         st.caption("⚠️ Selection changed — refetch needed")
 
     st.divider()
-    st.markdown("""
-    <div style='font-size:0.72rem; color:#4b5563; font-family: DM Mono, monospace; line-height:1.6'>
-    <strong style='color:#6366f1'>Data sources</strong><br>
-    ENTSO-E Transparency Platform<br>
-    Eurostat HICP<br><br>
-    <strong style='color:#6366f1'>Limitations</strong><br>
-    Installed capacity data may be incomplete for some countries.<br>
-    CPI is influenced by many factors beyond energy.
-    </div>
-    """, unsafe_allow_html=True)
+    with st.expander("ℹ️ Sources, Cache & About"):
+        # Data sources block
+        st.markdown("""
+        <div style='font-size:0.72rem; color:#4b5563; font-family: DM Mono, monospace; line-height:1.6'>
+        <strong style='color:#6366f1'>Data sources</strong><br>
+        ENTSO-E Transparency Platform<br>
+        Eurostat HICP, nrg_pc_204, nrg_ind_id<br><br>
+        <strong style='color:#6366f1'>Limitations</strong><br>
+        Installed capacity data may be incomplete for some countries.<br>
+        CPI is influenced by many factors beyond energy.
+        </div>
+        """, unsafe_allow_html=True)
 
-    st.divider()
-    with st.expander("🗄️ Cache & Scheduler"):
+        st.markdown("")
+        # Cache stats
         stats = cache_stats()
         st.markdown(
-            f"<div style='font-size:0.72rem; font-family:DM Mono,monospace; line-height:2; color:#9ca3af;'>"
-            f"<span style='color:#22c55e'>●</span> <strong>{stats['fresh']}</strong> fresh &nbsp;·&nbsp; "
-            f"<strong>{stats['total']}</strong> total entries &nbsp;·&nbsp; "
+            f"<div style='font-size:0.72rem; font-family:DM Mono,monospace; line-height:2; color:#4b5563;'>"
+            f"<strong style='color:#6366f1'>Cache</strong>: "
+            f"<span style='color:#16a34a'>●</span> <strong>{stats['fresh']}</strong> fresh · "
+            f"<strong>{stats['total']}</strong> total · "
             f"<strong>{stats['size_kb']} KB</strong>"
             f"</div>",
             unsafe_allow_html=True,
         )
         entries = cache_info()
         if entries:
-            with st.expander(f"Show {len(entries)} entries"):
+            with st.expander(f"Show {len(entries)} cached entries"):
                 for e in entries:
-                    colour = "#22c55e" if e["fresh"] else "#f59e0b"
+                    colour = "#16a34a" if e["fresh"] else "#f59e0b"
                     st.markdown(
                         f"<div style='font-size:0.68rem; font-family:DM Mono,monospace; color:{colour}'>"
-                        f"{'●' if e['fresh'] else '○'} {e['key']} &nbsp; "
-                        f"{e['age_min']} min ago &nbsp;·&nbsp; {e['size_kb']} KB &nbsp;·&nbsp; TTL {e['ttl_h']}h"
+                        f"{'●' if e['fresh'] else '○'} {e['key']} · "
+                        f"{e['age_min']} min ago · {e['size_kb']} KB · TTL {e['ttl_h']}h"
                         f"</div>",
                         unsafe_allow_html=True,
                     )
-        st.caption("🤖 Background scheduler pre-fetches top countries every 2h.")
+        st.caption("🤖 Scheduler pre-fetches top countries every 2h.")
         if st.button("🗑 Clear all cache", width='stretch', key="btn_clear_cache"):
             n = clear_cache()
             st.success(f"Cleared {n} entries.")
@@ -1550,7 +1661,7 @@ with tab1:
     ])
     if has_any_structural:
         st.divider()
-        st.markdown('<div class="section-title">⬇️ Download Data</div>', unsafe_allow_html=True)
+        st.markdown('<div style="margin-top:1.5rem; padding-top:0.6rem; border-top:1px solid #e5e7eb;"><span style="color:#6b7280; font-size:0.78rem; font-family:DM Mono,monospace;">📥 Export this tab&#39;s data as CSV:</span></div>', unsafe_allow_html=True)
         dl1, dl2 = st.columns(2)
         dl3, dl4 = st.columns(2)
 
@@ -1778,7 +1889,7 @@ with tab2:
 
         # ── CSV Downloads ──────────────────────────────────────────────────────
         st.divider()
-        st.markdown('<div class="section-title">⬇️ Download Data</div>', unsafe_allow_html=True)
+        st.markdown('<div style="margin-top:1.5rem; padding-top:0.6rem; border-top:1px solid #e5e7eb;"><span style="color:#6b7280; font-size:0.78rem; font-family:DM Mono,monospace;">📥 Export this tab&#39;s data as CSV:</span></div>', unsafe_allow_html=True)
         dl1, dl2, dl3 = st.columns(3)
         if prices is not None and len(prices) > 0:
             csv_prices = monthly_avg_prices(prices).reset_index()
@@ -2005,7 +2116,7 @@ with tab3:
         # ── CSV Downloads ──────────────────────────────────────────────────────
         if prices is not None or gen is not None:
             st.divider()
-            st.markdown('<div class="section-title">⬇️ Download Data</div>', unsafe_allow_html=True)
+            st.markdown('<div style="margin-top:1.5rem; padding-top:0.6rem; border-top:1px solid #e5e7eb;"><span style="color:#6b7280; font-size:0.78rem; font-family:DM Mono,monospace;">📥 Export this tab&#39;s data as CSV:</span></div>', unsafe_allow_html=True)
             dl1, dl2 = st.columns(2)
             if prices is not None and len(prices) > 0:
                 csv_hourly = prices.reset_index()
@@ -2092,6 +2203,108 @@ with tab4:
             f"</div>",
             unsafe_allow_html=True,
         )
+
+        # ══════════════════════════════════════════════════════════════════════
+        # KEY FINDINGS — auto-generated executive summary
+        # ══════════════════════════════════════════════════════════════════════
+        # Pre-compute the long-term metrics to generate a 2-3 sentence headline.
+        _kf_lines = []
+        _kf_count = {country_label: 0, compare_label: 0}
+
+        # Helper to compute capacity share once
+        def _kf_cap_share(cap_df):
+            if cap_df is None or cap_df.empty:
+                return None
+            re_cols = [c for c in cap_df.columns if c in RENEWABLE_SOURCES]
+            if not re_cols:
+                return None
+            tot = cap_df.sum(axis=1)
+            re  = cap_df[re_cols].sum(axis=1)
+            s   = (re / tot * 100).round(1)
+            return float(s.iloc[-1]) if len(s) > 0 else None
+
+        _kf_cap_a = _kf_cap_share(capacity)
+        _kf_cap_b = _kf_cap_share(cmp_capacity)
+        _kf_id_a  = float(import_dep.iloc[-1])     if import_dep     is not None and len(import_dep)     > 0 else None
+        _kf_id_b  = float(cmp_import_dep.iloc[-1]) if cmp_import_dep is not None and len(cmp_import_dep) > 0 else None
+        _kf_ec_a  = inflation["latest_energy"]     if inflation     else None
+        _kf_ec_b  = cmp_inflation["latest_energy"] if cmp_inflation else None
+        _kf_hp_a  = float(household_price.iloc[-1])     if household_price     is not None and len(household_price)     > 0 else None
+        _kf_hp_b  = float(cmp_household_price.iloc[-1]) if cmp_household_price is not None and len(cmp_household_price) > 0 else None
+
+        # Tally wins per country across 4 structural metrics
+        if _kf_cap_a is not None and _kf_cap_b is not None:
+            _kf_count[country_label if _kf_cap_a > _kf_cap_b else compare_label] += 1
+        if _kf_id_a is not None and _kf_id_b is not None:
+            _kf_count[country_label if _kf_id_a < _kf_id_b else compare_label] += 1
+        if _kf_ec_a is not None and _kf_ec_b is not None:
+            _kf_count[country_label if _kf_ec_a < _kf_ec_b else compare_label] += 1
+        if _kf_hp_a is not None and _kf_hp_b is not None:
+            _kf_count[country_label if _kf_hp_a < _kf_hp_b else compare_label] += 1
+
+        _kf_total = sum(_kf_count.values())
+        if _kf_total > 0:
+            _kf_leader  = max(_kf_count, key=_kf_count.get)
+            _kf_lag     = compare_label if _kf_leader == country_label else country_label
+            _kf_score_a = _kf_count[country_label]
+            _kf_score_b = _kf_count[compare_label]
+
+            # Sentence 1: who leads overall
+            if _kf_score_a == _kf_score_b:
+                _kf_lines.append(
+                    f"📊 **{country_label}** and **{compare_label}** are evenly matched on structural energy metrics ({_kf_score_a}–{_kf_score_b})."
+                )
+            else:
+                _kf_lines.append(
+                    f"📊 **{_kf_leader}** leads on **{max(_kf_score_a, _kf_score_b)} of {_kf_total}** structural metrics vs **{_kf_lag}**."
+                )
+
+            # Sentence 2: thesis alignment check
+            if _kf_cap_a is not None and _kf_cap_b is not None and _kf_id_a is not None and _kf_id_b is not None and _kf_ec_a is not None and _kf_ec_b is not None:
+                cap_leader  = country_label if _kf_cap_a > _kf_cap_b else compare_label
+                id_leader   = country_label if _kf_id_a < _kf_id_b else compare_label
+                ec_leader   = country_label if _kf_ec_a < _kf_ec_b else compare_label
+                if cap_leader == id_leader == ec_leader:
+                    _kf_lines.append(
+                        f"✅ The causal chain holds: **{cap_leader}** leads on renewable capacity, "
+                        "has lower import dependency, AND lower energy inflation — consistent with the thesis."
+                    )
+                else:
+                    _kf_lines.append(
+                        f"⚠️ Mixed results for the causal chain: capacity leader is **{cap_leader}**, "
+                        f"but import dependency leader is **{id_leader}** and energy CPI leader is **{ec_leader}**."
+                    )
+
+            # Sentence 3: standout metric
+            standout_pairs = []
+            if _kf_cap_a is not None and _kf_cap_b is not None:
+                standout_pairs.append(("renewable capacity", abs(_kf_cap_a - _kf_cap_b), "pp"))
+            if _kf_id_a is not None and _kf_id_b is not None:
+                standout_pairs.append(("import dependency", abs(_kf_id_a - _kf_id_b), "pp"))
+            if _kf_ec_a is not None and _kf_ec_b is not None:
+                standout_pairs.append(("energy CPI", abs(_kf_ec_a - _kf_ec_b), "pp"))
+            if standout_pairs:
+                metric_name, diff, unit = max(standout_pairs, key=lambda x: x[1])
+                _kf_lines.append(
+                    f"🎯 Biggest gap: **{metric_name}** with a {diff:.1f}{unit} difference between the two countries."
+                )
+
+            st.markdown(
+                f"""
+                <div style='background:linear-gradient(135deg,#eef2ff 0%,#e0e7ff 100%);
+                            border:1px solid #a5b4fc; border-left:4px solid #6366f1;
+                            border-radius:10px; padding:1rem 1.4rem; margin-bottom:1rem;'>
+                    <div style='font-size:0.78rem; color:#6366f1; font-family:DM Mono,monospace;
+                                font-weight:600; letter-spacing:0.05em; margin-bottom:0.4rem;'>
+                        💡 KEY FINDINGS
+                    </div>
+                    <div style='font-size:0.92rem; color:#312e81; line-height:1.7;'>
+                        {"<br>".join(_kf_lines)}
+                    </div>
+                </div>
+                """,
+                unsafe_allow_html=True,
+            )
 
         # ══════════════════════════════════════════════════════════════════════
         # EUROPEAN OVERVIEW — multi-country ranking with highlighted selection
@@ -2598,26 +2811,16 @@ with tab4:
             enrg_a_val = inflation['latest_energy']
             enrg_b_val = cmp_inflation['latest_energy']
 
-            # Row 1: General CPI
-            inf1, inf2 = st.columns(2)
-            inf1.markdown(cmp_card(
-                f"{country_label} — General CPI", f"{cpi_a_val:+.1f}%", "latest YoY",
-                "win" if cpi_a_val < cpi_b_val else "loss"
+            # Compact grouped rows: one per metric, two countries side by side
+            st.markdown(cmp_row(
+                "🏷️", "General CPI (latest YoY)",
+                country_label, cpi_a_val, compare_label, cpi_b_val,
+                fmt="{:+.1f}", unit="%", lower_better=True,
             ), unsafe_allow_html=True)
-            inf2.markdown(cmp_card(
-                f"{compare_label} — General CPI", f"{cpi_b_val:+.1f}%", "latest YoY",
-                "win" if cpi_b_val < cpi_a_val else "loss"
-            ), unsafe_allow_html=True)
-            st.markdown("")
-            # Row 2: Energy CPI
-            inf3, inf4 = st.columns(2)
-            inf3.markdown(cmp_card(
-                f"{country_label} — Energy CPI", f"{enrg_a_val:+.1f}%", "latest YoY",
-                "win" if enrg_a_val < enrg_b_val else "loss"
-            ), unsafe_allow_html=True)
-            inf4.markdown(cmp_card(
-                f"{compare_label} — Energy CPI", f"{enrg_b_val:+.1f}%", "latest YoY",
-                "win" if enrg_b_val < enrg_a_val else "loss"
+            st.markdown(cmp_row(
+                "⚡", "Energy CPI (latest YoY)",
+                country_label, enrg_a_val, compare_label, enrg_b_val,
+                fmt="{:+.1f}", unit="%", lower_better=True,
             ), unsafe_allow_html=True)
 
             st.markdown("")
@@ -2767,7 +2970,8 @@ with tab4:
                 xaxis_title="Year",
                 legend=dict(orientation="h", y=-0.18),
             )
-            _add_crisis_line(fig_id_cmp, import_dep.index)
+            _id_index = (import_dep if import_dep is not None else cmp_import_dep).index
+            _add_crisis_line(fig_id_cmp, _id_index)
             st.plotly_chart(fig_id_cmp, width='stretch')
 
             # Trend summary: is each country becoming more or less dependent?
@@ -2928,7 +3132,7 @@ with tab4:
 
         # ── CSV Downloads ──────────────────────────────────────────────────────
         st.divider()
-        st.markdown('<div class="section-title">⬇️ Download Comparison Data</div>', unsafe_allow_html=True)
+        st.markdown('<div style="margin-top:1.5rem; padding-top:0.6rem; border-top:1px solid #e5e7eb;"><span style="color:#6b7280; font-size:0.78rem; font-family:DM Mono,monospace;">📥 Export comparison data as CSV:</span></div>', unsafe_allow_html=True)
         dl1, dl2 = st.columns(2)
         dl3, dl4 = st.columns(2)
 
