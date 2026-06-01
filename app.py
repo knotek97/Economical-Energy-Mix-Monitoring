@@ -54,6 +54,9 @@ from data.processor import (
     monthly_avg_prices,
     monthly_renewable_share,
     price_volatility,
+    carbon_intensity,
+    carbon_intensity_series,
+    carbon_intensity_band,
 )
 from data.cache_db import clear_cache, cache_info, cache_stats, db_get_updated_at
 from data.scheduler import start_scheduler
@@ -2116,6 +2119,67 @@ with tab3:
             )
             st.plotly_chart(fig_bar, width='stretch')
 
+            # ── Carbon intensity ───────────────────────────────────────────────
+            st.markdown('<div class="section-title">🏭 Carbon Intensity</div>', unsafe_allow_html=True)
+            st.caption(
+                "Estimated CO₂ emissions per kWh based on the generation mix, using "
+                "IPCC AR5 lifecycle emission factors. An estimate — not measured emissions."
+            )
+
+            ci = carbon_intensity(gen)
+            if ci is not None:
+                band_label, band_color = carbon_intensity_band(ci)
+                ci_col1, ci_col2 = st.columns([1, 2])
+                with ci_col1:
+                    st.markdown(f"""
+                    <div class="metric-card" style="border-left:4px solid {band_color};">
+                        <div class="metric-label">Carbon Intensity (period avg)</div>
+                        <div class="metric-value" style="color:{band_color};">{ci:.0f}</div>
+                        <div class="metric-unit">gCO₂/kWh · {band_label}</div>
+                    </div>""", unsafe_allow_html=True)
+                    st.markdown("")
+                    # ETS cost context
+                    ets_price = 75  # approximate EU ETS price €/tonne CO2
+                    ets_cost  = round(ci / 1000 * ets_price, 2)  # gCO2/kWh → tonnes/MWh × price
+                    st.caption(
+                        f"💶 At ~€{ets_price}/t EU ETS, the carbon content adds roughly "
+                        f"**€{ets_cost}/MWh** to the cost of this electricity."
+                    )
+
+                with ci_col2:
+                    ci_series = carbon_intensity_series(gen, freq="D")
+                    if len(ci_series) > 1:
+                        fig_ci = go.Figure()
+                        fig_ci.add_trace(go.Scatter(
+                            x=ci_series.index, y=ci_series.values,
+                            mode="lines",
+                            line=dict(color=band_color, width=2),
+                            fill="tozeroy",
+                            fillcolor=f"rgba(220,38,38,0.06)",
+                            name="gCO₂/kWh",
+                        ))
+                        # Reference bands
+                        fig_ci.add_hline(y=100, line_dash="dot", line_color="#16a34a",
+                                         line_width=1, annotation_text="Very low (100)",
+                                         annotation_position="right",
+                                         annotation_font=dict(size=9, color="#16a34a"))
+                        fig_ci.add_hline(y=400, line_dash="dot", line_color="#ea580c",
+                                         line_width=1, annotation_text="High (400)",
+                                         annotation_position="right",
+                                         annotation_font=dict(size=9, color="#ea580c"))
+                        fig_ci.update_layout(
+                            title="Daily Carbon Intensity (gCO₂/kWh)",
+                            template="plotly_white", showlegend=False,
+                            margin=dict(l=0, r=0, t=40, b=0), height=CH_MD,
+                            yaxis_title="gCO₂/kWh",
+                        )
+                        _add_crisis_line(fig_ci, ci_series.index)
+                        st.plotly_chart(fig_ci, width='stretch')
+                    else:
+                        st.info("Not enough data for a daily carbon intensity trend.")
+            else:
+                st.info("Carbon intensity unavailable — no generation data for this period.")
+
         # ── CSV Downloads ──────────────────────────────────────────────────────
         if prices is not None or gen is not None:
             st.divider()
@@ -2761,6 +2825,34 @@ with tab4:
                 "Combined Low-Carbon", f"{max(lc_a, lc_b)}% vs {min(lc_a, lc_b)}%",
                 f"{lc_leader} leads (renewable + nuclear)"
             ), unsafe_allow_html=True)
+
+        # ── Carbon intensity comparison ────────────────────────────────────────
+        st.markdown('<div class="section-title">🏭 Carbon Intensity (selected period)</div>', unsafe_allow_html=True)
+        st.caption(
+            "Estimated gCO₂/kWh from the generation mix (IPCC AR5 factors). "
+            "Lower = cleaner electricity, less exposure to EU ETS carbon costs and future CBAM."
+        )
+        ci_a = carbon_intensity(gen)     if gen     is not None else None
+        ci_b = carbon_intensity(cmp_gen) if cmp_gen is not None else None
+        if ci_a is not None and ci_b is not None:
+            st.markdown(cmp_row(
+                "🏭", "Carbon Intensity",
+                country_label, ci_a, compare_label, ci_b,
+                fmt="{:.0f}", unit=" gCO₂/kWh", lower_better=True,
+                detail_a=carbon_intensity_band(ci_a)[0],
+                detail_b=carbon_intensity_band(ci_b)[0],
+            ), unsafe_allow_html=True)
+            # ETS cost context for both
+            ets_price = 75
+            cost_a = round(ci_a / 1000 * ets_price, 2)
+            cost_b = round(ci_b / 1000 * ets_price, 2)
+            st.caption(
+                f"💶 EU ETS carbon cost at ~€{ets_price}/t: "
+                f"**{country_label}** ≈ €{cost_a}/MWh · "
+                f"**{compare_label}** ≈ €{cost_b}/MWh embedded in electricity cost."
+            )
+        else:
+            st.info("Carbon intensity unavailable for one or both countries (no generation data).")
 
         # ── Price volatility comparison ─────────────────────────────────────────
         st.markdown('<div class="section-title">📉 Price Volatility</div>', unsafe_allow_html=True)
@@ -3444,6 +3536,17 @@ with tab6:
             "A rising 'excl. taxes' price alongside falling fossil fuel prices (as in Germany 2012–2018) "
             "is a strong indicator of rising network costs from grid investment for renewables. "
             "This is a short-term cost that ultimately enables long-term price stability."
+        )
+        st.markdown("---")
+        st.markdown("**Carbon intensity (gCO₂/kWh)**")
+        st.markdown(
+            "Estimated grams of CO₂ emitted per kilowatt-hour of electricity, calculated by "
+            "weighting each generation source by its lifecycle emission factor (IPCC AR5). "
+            "Coal is ~820–1050, gas ~490, while wind, solar, hydro and nuclear are all under 50. "
+            "This is an **estimate** based on standard factors, not measured smokestack emissions. "
+            "It matters economically because the EU Emissions Trading System (ETS) puts a price on "
+            "every tonne of CO₂ — so high-carbon electricity carries a rising hidden cost. "
+            "The Carbon Border Adjustment Mechanism (CBAM), phasing in from 2026, extends this to imports."
         )
 
     st.divider()

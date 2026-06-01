@@ -119,6 +119,110 @@ TIER_COLORS = {
 }
 
 
+# ── CO₂ emission factors ──────────────────────────────────────────────────────
+# Lifecycle greenhouse gas emission factors in gCO₂-equivalent per kWh.
+# Source: IPCC AR5 (2014) Annex III, median lifecycle values, widely used in
+# academic and policy work. These are ESTIMATES — actual emissions vary by
+# plant age, fuel quality, and methodology (direct combustion vs full lifecycle).
+#
+# Presented as "estimated carbon intensity" — not measured emissions.
+# Biomass is contested (counted as ~230 here; some methodologies treat it as
+# near-zero under carbon-neutrality assumptions, others much higher).
+EMISSION_FACTORS = {
+    # Renewables — low lifecycle emissions (manufacturing, construction)
+    "Solar":                            48,
+    "Wind Onshore":                     11,
+    "Wind Offshore":                    12,
+    "Hydro Run-of-river and poundage":  24,
+    "Hydro Water Reservoir":            24,
+    "Hydro Pumped Storage":             24,
+    "Geothermal":                       38,
+    "Marine":                           17,
+    "Biomass":                          230,   # contested — lifecycle estimate
+    "Waste":                            580,   # waste incineration
+    "Other renewable":                  100,
+    # Nuclear — very low lifecycle emissions
+    "Nuclear":                          12,
+    # Fossil — high direct-combustion emissions
+    "Fossil Gas":                       490,
+    "Fossil Coal-derived gas":          490,
+    "Fossil Hard coal":                 820,
+    "Fossil Brown coal/Lignite":        1050,
+    "Fossil Oil":                       650,
+    "Fossil Oil shale":                 900,
+    "Fossil Peat":                      750,
+    # Fallback for unmapped sources
+    "Other":                            300,
+}
+
+# Default factor for any source not in the table (conservative mid-range)
+DEFAULT_EMISSION_FACTOR = 300
+
+
+def carbon_intensity(gen: pd.DataFrame) -> float | None:
+    """
+    Estimated carbon intensity of electricity generation in gCO₂/kWh,
+    weighted by each source's share of total generation over the period.
+
+    Returns None if no generation data. Otherwise a single weighted-average
+    figure for the whole period.
+
+    Methodology: Σ(generation_source × factor_source) / Σ(generation_total)
+    """
+    if gen is None or gen.empty:
+        return None
+    totals = gen.sum()           # total MWh per source over the period
+    total_gen = totals.sum()
+    if total_gen <= 0:
+        return None
+    weighted = sum(
+        totals[src] * EMISSION_FACTORS.get(src, DEFAULT_EMISSION_FACTOR)
+        for src in totals.index
+    )
+    return round(weighted / total_gen, 1)
+
+
+def carbon_intensity_series(gen: pd.DataFrame, freq: str = "D") -> pd.Series:
+    """
+    Carbon intensity over time (gCO₂/kWh) resampled at the given frequency.
+    Useful for showing how grid carbon intensity varies day to day with the
+    generation mix (e.g. low on windy days, high when gas ramps up).
+
+    freq: pandas resample frequency — "D" daily, "ME" monthly, "h" hourly.
+    """
+    if gen is None or gen.empty:
+        return pd.Series(dtype=float)
+
+    factors = pd.Series(
+        {src: EMISSION_FACTORS.get(src, DEFAULT_EMISSION_FACTOR) for src in gen.columns}
+    )
+    resampled = gen.resample(freq).sum()
+    total     = resampled.sum(axis=1)
+    weighted  = (resampled * factors).sum(axis=1)
+    intensity = (weighted / total).round(1)
+    return intensity[total > 0]
+
+
+def carbon_intensity_band(intensity: float) -> tuple[str, str]:
+    """
+    Classify a carbon intensity value into a descriptive band + colour.
+    Bands roughly follow ElectricityMaps / Ember conventions.
+
+    Returns (label, hex_colour).
+    """
+    if intensity is None:
+        return ("Unknown", "#6b7280")
+    if intensity < 100:
+        return ("Very low", "#16a34a")     # green
+    if intensity < 250:
+        return ("Low", "#65a30d")          # lime
+    if intensity < 400:
+        return ("Moderate", "#ca8a04")     # amber
+    if intensity < 600:
+        return ("High", "#ea580c")         # orange
+    return ("Very high", "#dc2626")        # red
+
+
 def total_by_source(gen: pd.DataFrame) -> pd.Series:
     """Total generation (MWh) per source, sorted descending."""
     totals = gen.sum().sort_values(ascending=False)
