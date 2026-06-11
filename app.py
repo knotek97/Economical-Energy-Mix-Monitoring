@@ -649,29 +649,24 @@ CODE_TO_LABEL = {v: k for k, v in COUNTRIES.items()}
 # always wins and the URL is updated to match.
 _qp          = st.query_params
 _first_load  = not st.session_state.get("fetch_attempted", False)
-_default_idx         = 0
-_default_compare_idx = 0
 _default_compare_on  = False
 
 if _first_load:
-    # Primary country
+    # Primary country — seed the widget's session state key directly
     if "country" in _qp:
         _code    = _qp.get("country", "")
         _matched = [k for k, v in COUNTRIES.items() if v == _code]
-        if _matched:
-            _default_idx = list(COUNTRIES.keys()).index(_matched[0])
+        if _matched and "primary_country_select" not in st.session_state:
+            st.session_state["primary_country_select"] = _matched[0]
 
     # Comparison country — pre-select AND enable the toggle
     if "compare" in _qp:
         _cmp_code    = _qp.get("compare", "")
         _cmp_matched = [k for k, v in COUNTRIES.items() if v == _cmp_code]
         if _cmp_matched:
-            _default_compare_on  = True
-            # Build compare_options without primary (same logic as sidebar below)
-            _primary_label       = list(COUNTRIES.keys())[_default_idx]
-            _compare_options_tmp = [k for k in COUNTRIES if k != _primary_label]
-            if _cmp_matched[0] in _compare_options_tmp:
-                _default_compare_idx = _compare_options_tmp.index(_cmp_matched[0])
+            _default_compare_on = True
+            if "compare_country_select" not in st.session_state:
+                st.session_state["compare_country_select"] = _cmp_matched[0]
 
     # Pre-set the toggle state via session state so it renders open
     if _default_compare_on and not st.session_state.get("compare_toggle"):
@@ -684,9 +679,14 @@ with st.sidebar:
     st.caption("ENTSO-E · Eurostat · Public & Academic Dashboard")
     st.divider()
 
-    # Primary country — index comes from URL params on first load, 0 otherwise
-    country_label = st.selectbox("🌍 Primary country", list(COUNTRIES.keys()),
-                                 index=_default_idx)
+    # Primary country — key lets Streamlit preserve the selection across reruns.
+    # URL params seed the initial value via session state above; after that the
+    # user's choice persists without being reset on every rerun.
+    country_label = st.selectbox(
+        "🌍 Primary country",
+        list(COUNTRIES.keys()),
+        key="primary_country_select",
+    )
     country_code  = COUNTRIES[country_label]
 
     st.divider()
@@ -696,10 +696,17 @@ with st.sidebar:
     compare_enabled = st.toggle("Enable comparison", key="compare_toggle")
     if compare_enabled:
         compare_options = {k: v for k, v in COUNTRIES.items() if k != country_label}
-        compare_label   = st.selectbox(
+        _compare_keys   = list(compare_options.keys())
+
+        # If the stored compare choice equals the new primary (now excluded),
+        # clear it so the selectbox falls back to the first valid option.
+        if st.session_state.get("compare_country_select") not in _compare_keys:
+            st.session_state.pop("compare_country_select", None)
+
+        compare_label = st.selectbox(
             "🌍 Compare country",
-            list(compare_options.keys()),
-            index=min(_default_compare_idx, len(compare_options) - 1),
+            _compare_keys,
+            key="compare_country_select",
         )
         compare_code = compare_options[compare_label]
     else:
@@ -1139,10 +1146,19 @@ if all(v is None for v in [prices, gen, inflation, capacity]):
             </div>
             """, unsafe_allow_html=True)
             if st.button(f"Use this comparison", key=f"quick_{sug['country']}_{sug['compare']}"):
+                # Resolve codes back to labels and set the widget keys directly,
+                # so the selection always applies even if the user already touched
+                # the selectboxes.
+                _p_label = CODE_TO_LABEL.get(sug["country"])
+                _c_label = CODE_TO_LABEL.get(sug["compare"])
+                if _p_label:
+                    st.session_state["primary_country_select"] = _p_label
+                if _c_label:
+                    st.session_state["compare_country_select"] = _c_label
+                st.session_state["compare_toggle"] = True
                 st.query_params.update({
                     "country": sug["country"],
                     "compare": sug["compare"],
-                    "years":   "5",
                 })
                 st.rerun()
 
