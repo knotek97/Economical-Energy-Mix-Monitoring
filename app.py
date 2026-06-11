@@ -435,6 +435,62 @@ def _compute_overview(metric_name: str, n_years: int, countries: tuple) -> dict:
     return results
 
 
+def _render_overview(ov_results: dict, ov_metric: str, country_code: str, compare_code: str) -> None:
+    """Render the European overview ranking bar chart from precomputed results."""
+    valid = {cc: v for cc, v in ov_results.items() if v is not None}
+    if not valid:
+        st.info(f"No data available across European countries for {ov_metric}.")
+        return
+
+    cfg = OVERVIEW_METRICS[ov_metric]
+    sorted_items = sorted(
+        valid.items(),
+        key=lambda x: x[1],
+        reverse=not cfg["lower_better"],   # lower_better=True → ascending
+    )
+
+    colours, borders, labels, values, text_labels = [], [], [], [], []
+    for cc, val in sorted_items:
+        label = CODE_TO_LABEL.get(cc, cc)
+        labels.append(label)
+        values.append(val)
+        text_labels.append(cfg["format"].format(val))
+        if cc == country_code:
+            colours.append("#6366f1"); borders.append("#3730a3")
+        elif cc == compare_code:
+            colours.append("#f59e0b"); borders.append("#92400e")
+        else:
+            colours.append("#cbd5e1"); borders.append("#94a3b8")
+
+    fig_ov = go.Figure(go.Bar(
+        x=values, y=labels, orientation="h",
+        marker=dict(color=colours, line=dict(color=borders, width=1)),
+        text=text_labels, textposition="outside",
+        hovertemplate="<b>%{y}</b><br>" + cfg["x_title"] + ": %{text}<extra></extra>",
+    ))
+    fig_ov.update_layout(
+        template="plotly_white",
+        margin=dict(l=0, r=20, t=10, b=10),
+        height=max(CH_MD, 28 * len(labels) + 60),
+        xaxis_title=cfg["x_title"],
+        yaxis=dict(autorange="reversed"),
+        showlegend=False,
+    )
+    st.plotly_chart(fig_ov, width='stretch')
+
+    sel_ranks = []
+    for i, (cc, _) in enumerate(sorted_items, start=1):
+        if cc in (country_code, compare_code):
+            sel_ranks.append((cc, i, len(sorted_items)))
+    if sel_ranks:
+        msgs = []
+        for cc, rank, total in sel_ranks:
+            label = CODE_TO_LABEL.get(cc, cc)
+            msgs.append(f"**{label}** ranks **{rank} of {total}**")
+        arrow = "⬆️ higher is better" if not cfg["lower_better"] else "⬇️ lower is better"
+        st.caption(f"{arrow} · " + " · ".join(msgs))
+
+
 def _stale_banner(fetched_country_code: str | None, current_country_code: str,
                   current_label: str, fetched_label: str | None,
                   fetched_start: str | None = None, fetched_end: str | None = None,
@@ -2401,83 +2457,40 @@ with tab4:
             "Switch metric below — your selected countries are highlighted in colour."
         )
 
-        ov_metric = st.selectbox(
-            "Ranking metric",
-            options=list(OVERVIEW_METRICS.keys()),
-            index=0,
-            key="overview_metric_select",
-            label_visibility="collapsed",
-        )
+        # Lazy-load: fetching 14 countries is expensive, and Streamlit runs every
+        # tab's code on every rerun (tabs are not lazy). So we only compute the
+        # overview after the user explicitly asks for it, then keep it loaded.
+        if "overview_loaded" not in st.session_state:
+            st.session_state.overview_loaded = False
 
-        # Ensure both selected countries are included even if not in OVERVIEW_COUNTRIES
-        _overview_set = list(dict.fromkeys(
-            OVERVIEW_COUNTRIES + [country_code] + ([compare_code] if compare_code else [])
-        ))
-
-        with st.spinner(f"Loading European overview — {ov_metric}…"):
-            ov_results = _compute_overview(
-                ov_metric, long_term_years, tuple(_overview_set)
+        if not st.session_state.overview_loaded:
+            st.info(
+                "📊 The European overview compares up to 14 countries. "
+                "It may take a few seconds to load the first time."
             )
-
-        # Filter to countries with valid data and sort
-        valid = {cc: v for cc, v in ov_results.items() if v is not None}
-        if not valid:
-            st.info(f"No data available across European countries for {ov_metric}.")
+            if st.button("🌍 Load European overview", key="btn_load_overview"):
+                st.session_state.overview_loaded = True
+                st.rerun()
         else:
-            cfg = OVERVIEW_METRICS[ov_metric]
-            sorted_items = sorted(
-                valid.items(),
-                key=lambda x: x[1],
-                reverse=not cfg["lower_better"],   # lower_better=True → ascending
+            ov_metric = st.selectbox(
+                "Ranking metric",
+                options=list(OVERVIEW_METRICS.keys()),
+                index=0,
+                key="overview_metric_select",
+                label_visibility="collapsed",
             )
 
-            # Build colour and border arrays — highlight selected countries
-            colours, borders, labels, values, text_labels = [], [], [], [], []
-            for cc, val in sorted_items:
-                label = CODE_TO_LABEL.get(cc, cc)
-                labels.append(label)
-                values.append(val)
-                text_labels.append(cfg["format"].format(val))
-                if cc == country_code:
-                    colours.append("#6366f1")   # primary — indigo
-                    borders.append("#3730a3")
-                elif cc == compare_code:
-                    colours.append("#f59e0b")   # compare — amber
-                    borders.append("#92400e")
-                else:
-                    colours.append("#cbd5e1")   # everyone else — muted grey
-                    borders.append("#94a3b8")
-
-            fig_ov = go.Figure(go.Bar(
-                x=values, y=labels,
-                orientation="h",
-                marker=dict(color=colours, line=dict(color=borders, width=1)),
-                text=text_labels,
-                textposition="outside",
-                hovertemplate="<b>%{y}</b><br>" + cfg["x_title"] + ": %{text}<extra></extra>",
+            # Ensure both selected countries are included even if not in OVERVIEW_COUNTRIES
+            _overview_set = list(dict.fromkeys(
+                OVERVIEW_COUNTRIES + [country_code] + ([compare_code] if compare_code else [])
             ))
-            fig_ov.update_layout(
-                template="plotly_white",
-                margin=dict(l=0, r=20, t=10, b=10),
-                height=max(CH_MD, 28 * len(labels) + 60),
-                xaxis_title=cfg["x_title"],
-                yaxis=dict(autorange="reversed"),   # best at top
-                showlegend=False,
-            )
-            st.plotly_chart(fig_ov, width='stretch')
 
-            # Position summary for the two selected countries
-            sel_ranks = []
-            for i, (cc, _) in enumerate(sorted_items, start=1):
-                if cc in (country_code, compare_code):
-                    sel_ranks.append((cc, i, len(sorted_items)))
-            if sel_ranks:
-                msgs = []
-                for cc, rank, total in sel_ranks:
-                    label = CODE_TO_LABEL.get(cc, cc)
-                    msgs.append(f"**{label}** ranks **{rank} of {total}**")
-                arrow = "⬆️ higher is better" if not cfg["lower_better"] else "⬇️ lower is better"
-                st.caption(f"{arrow} · " + " · ".join(msgs))
+            with st.spinner(f"Loading European overview — {ov_metric}…"):
+                ov_results = _compute_overview(
+                    ov_metric, long_term_years, tuple(_overview_set)
+                )
+
+            _render_overview(ov_results, ov_metric, country_code, compare_code)
 
         st.divider()
 
