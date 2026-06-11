@@ -647,16 +647,20 @@ CODE_TO_LABEL = {v: k for k, v in COUNTRIES.items()}
 # Computed here (after COUNTRIES, before sidebar) so selectboxes can use them.
 # Only applied on first load — once the user has clicked Fetch, the sidebar
 # always wins and the URL is updated to match.
+# The `apply_qp` flag (set by quick-start buttons) forces an override of the
+# selectbox values. This runs at the very top, BEFORE any widget is created,
+# so writing the widget keys here is allowed.
 _qp          = st.query_params
 _first_load  = not st.session_state.get("fetch_attempted", False)
-_default_compare_on  = False
+_force_apply = _qp.get("apply_qp", "") == "1"
+_default_compare_on = False
 
-if _first_load:
-    # Primary country — seed the widget's session state key directly
+if _first_load or _force_apply:
+    # Primary country
     if "country" in _qp:
         _code    = _qp.get("country", "")
         _matched = [k for k, v in COUNTRIES.items() if v == _code]
-        if _matched and "primary_country_select" not in st.session_state:
+        if _matched and ("primary_country_select" not in st.session_state or _force_apply):
             st.session_state["primary_country_select"] = _matched[0]
 
     # Comparison country — pre-select AND enable the toggle
@@ -665,12 +669,16 @@ if _first_load:
         _cmp_matched = [k for k, v in COUNTRIES.items() if v == _cmp_code]
         if _cmp_matched:
             _default_compare_on = True
-            if "compare_country_select" not in st.session_state:
+            if "compare_country_select" not in st.session_state or _force_apply:
                 st.session_state["compare_country_select"] = _cmp_matched[0]
 
     # Pre-set the toggle state via session state so it renders open
-    if _default_compare_on and not st.session_state.get("compare_toggle"):
+    if _default_compare_on and (not st.session_state.get("compare_toggle") or _force_apply):
         st.session_state["compare_toggle"] = True
+
+    # Clear the one-shot flag so it doesn't keep overriding the user afterwards
+    if _force_apply:
+        del st.query_params["apply_qp"]
 
 
 # ── Sidebar ───────────────────────────────────────────────────────────────────
@@ -1146,19 +1154,14 @@ if all(v is None for v in [prices, gen, inflation, capacity]):
             </div>
             """, unsafe_allow_html=True)
             if st.button(f"Use this comparison", key=f"quick_{sug['country']}_{sug['compare']}"):
-                # Resolve codes back to labels and set the widget keys directly,
-                # so the selection always applies even if the user already touched
-                # the selectboxes.
-                _p_label = CODE_TO_LABEL.get(sug["country"])
-                _c_label = CODE_TO_LABEL.get(sug["compare"])
-                if _p_label:
-                    st.session_state["primary_country_select"] = _p_label
-                if _c_label:
-                    st.session_state["compare_country_select"] = _c_label
-                st.session_state["compare_toggle"] = True
+                # Set URL params + an override flag. The seeding block at the top
+                # applies these on the next run, BEFORE the selectboxes render.
+                # We must not write widget keys here — the sidebar selectboxes have
+                # already been instantiated this run, so their keys are locked.
                 st.query_params.update({
-                    "country": sug["country"],
-                    "compare": sug["compare"],
+                    "country":  sug["country"],
+                    "compare":  sug["compare"],
+                    "apply_qp": "1",
                 })
                 st.rerun()
 
